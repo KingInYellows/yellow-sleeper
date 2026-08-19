@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-DEFAULT_TIMEOUT = httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=3.0)
+DEFAULT_TIMEOUT = httpx.Timeout(connect=10.0, read=90.0, write=30.0, pool=10.0)
 
 
 def build_shared_client() -> httpx.AsyncClient:

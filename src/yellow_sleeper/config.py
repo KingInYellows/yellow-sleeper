@@ -20,6 +20,32 @@ class StaticConfig(BaseModel):
     sleeper_username: str = Field("brad", max_length=100)
     league_format: str = "14-team SF PPR 0.5 TEP"
     cache_dir: Path = Path(".cache")
+    tep: float = Field(0.5, ge=0.0, le=2.0)
+    xlsx_path: Path | None = None
+    xlsx_enabled: bool = False
+
+    @field_validator("xlsx_enabled", mode="before")
+    @classmethod
+    def _coerce_bool(cls, value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return False
+        if isinstance(value, (int, float)):
+            return bool(value)
+        text = str(value).strip().lower()
+        if text in {"1", "true", "yes", "on"}:
+            return True
+        if text in {"0", "false", "no", "off", ""}:
+            return False
+        raise ValueError("xlsx_enabled must be a boolean")
+
+    @field_validator("xlsx_path", mode="before")
+    @classmethod
+    def _empty_path(cls, value: Any) -> Any:
+        if value is None or value == "":
+            return None
+        return value
 
 
 class DynamicPolicy(BaseModel):
@@ -146,6 +172,9 @@ def _load_static_config(
         "sleeper_username": "sleeper_username",
         "league_format": "league_format",
         "cache_dir": "cache_dir",
+        "tep": "tep",
+        "xlsx_path": "xlsx_path",
+        "xlsx_enabled": "xlsx_enabled",
     }
     for yaml_key, model_key in yaml_keys.items():
         if yaml_key in yaml_data:
@@ -158,6 +187,11 @@ def _load_static_config(
         "SLEEPER_USERNAME": "sleeper_username",
         "LEAGUE_FORMAT": "league_format",
         "CACHE_DIR": "cache_dir",
+        "YELLOW_SLEEPER_TEP": "tep",
+        "XLSX_PATH": "xlsx_path",
+        "YELLOW_SLEEPER_XLSX_PATH": "xlsx_path",
+        "XLSX_ENABLED": "xlsx_enabled",
+        "YELLOW_SLEEPER_XLSX_ENABLED": "xlsx_enabled",
     }
     for env_key, model_key in env_keys.items():
         if model_key not in values and env_key in env:
