@@ -3,6 +3,7 @@ from .draft import PickContext, RecentPick, WhatsOnTheClockInput, WhatsOnTheCloc
 from .envelope import DataStatus, PolicyStatus, ResolutionStatus, ResponseEnvelope, TransportError
 from .health import HealthCheckInput, HealthCheckOutput, LiveProbeResult
 from .picks import (
+    TRADED_PICKS_CAP,
     ListMyPicksInput,
     ListMyPicksOutput,
     ListTradedPicksInput,
@@ -18,6 +19,7 @@ from .roster import (
     GroupedRoster,
     LeaguePowerMapInput,
     LeaguePowerMapOutput,
+    LineupSlot,
     PositionalDepth,
     RosterMatch,
     RosterPlayer,
@@ -73,6 +75,7 @@ __all__ = [
     "HealthCheckOutput",
     "LeaguePowerMapInput",
     "LeaguePowerMapOutput",
+    "LineupSlot",
     "ListMyPicksInput",
     "ListMyPicksOutput",
     "ListTradedPicksInput",
@@ -96,6 +99,7 @@ __all__ = [
     "RosterPlayer",
     "SourceDisagreement",
     "SourceNote",
+    "TRADED_PICKS_CAP",
     "TeamRollup",
     "TransportError",
     "TradedPick",
