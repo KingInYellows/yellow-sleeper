@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import httpx
 
+from .analyze.overlay import OverlayBook, build_overlay
+from .analyze.tep import tep_explanation
 from .clients import FantasyCalcClient, SleeperClient, build_shared_client
+from .clients.xlsx import UserBookRow, load_user_book
 from .config import Config, load_config
 from .obs.logging import configure_logging
 from .store import Cache, CacheReadResult
@@ -22,9 +26,49 @@ class Runtime:
     http: httpx.AsyncClient
     sleeper: SleeperClient
     fantasycalc: FantasyCalcClient
+    _user_book: dict[str, UserBookRow] | None = field(default=None, repr=False)
 
     async def aclose(self) -> None:
         await self.http.aclose()
+
+    def username(self, as_user: str | None = None) -> str:
+        candidate = (as_user or self.config.static.sleeper_username or "").strip()
+        return candidate or self.config.static.sleeper_username
+
+    def tep_note(self) -> str:
+        return tep_explanation(self.config.static.tep)
+
+    def xlsx_path(self) -> Path | None:
+        return self.config.static.xlsx_path
+
+    def user_book(self) -> dict[str, UserBookRow]:
+        if not self.config.static.xlsx_enabled:
+            return {}
+        path = self.xlsx_path()
+        if path is None or not path.exists():
+            return {}
+        if self._user_book is None:
+            self._user_book = load_user_book(path)
+        return self._user_book
+
+    def overlay_for(
+        self,
+        values: list[dict[str, Any]] | list[Any],
+        players: dict[str, Any],
+    ) -> OverlayBook:
+        return build_overlay(
+            values,
+            players,
+            tep=self.config.static.tep,
+            user_book=self.user_book(),
+        )
+
+    def display_values(
+        self,
+        values: list[dict[str, Any]] | list[Any],
+        players: dict[str, Any],
+    ) -> dict[str, float]:
+        return self.overlay_for(values, players).display
 
     async def players(self, *, force: bool = False) -> tuple[dict[str, Any], str]:
         result = await self.sleeper.get_players_nfl_cached(self.cache, force=force)
@@ -78,9 +122,7 @@ class Runtime:
                 # Broad catch: TaskGroup raises ExceptionGroup (not in httpx.HTTPError),
                 # asyncio.TimeoutError is independent of httpx, and pydantic ValidationError
                 # surfaces from cache stale-fallback paths.
-                logger.error(
-                    "refresh_all: %r failed: %s", key, exc, exc_info=True
-                )
+                logger.error("refresh_all: %r failed: %s", key, exc, exc_info=True)
                 failures[key] = format_cache_error(exc) or str(exc)[:500]
         post = self.cache.statuses()
         return prior, post, refreshed, failures

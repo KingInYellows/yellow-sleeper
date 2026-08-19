@@ -33,11 +33,18 @@ async def dynasty_health_check(force_probe: bool = False) -> dict:
             )
             for i, result in enumerate(raw_results)
         ]
+    extra = [runtime.tep_note()]
+    book = runtime.user_book()
+    if runtime.config.static.xlsx_enabled:
+        extra.append(f"xlsx overlay: {len(book)} rows")
+    elif runtime.xlsx_path() is not None:
+        extra.append("xlsx overlay configured but disabled")
     output = health_check_output(
         cache_status=runtime.cache.statuses(),
         league_id=runtime.config.static.sleeper_league_id,
         user=runtime.config.static.sleeper_username,
         config_sources=runtime.config.static_sources,
         live_probe_results=probes,
+        extra_status_msgs=extra,
     )
     return output.model_dump(mode="json")

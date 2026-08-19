@@ -34,9 +34,19 @@ def current_season(snapshot: dict[str, Any], *, fallback: int = 2026) -> int:
 
 
 def find_roster_id_for_username(snapshot: dict[str, Any], username: str) -> int | None:
+    needle = (username or "").strip().lower()
+    if not needle:
+        return None
     user_id = None
     for user in snapshot.get("users", []):
-        if username in {user.get("username"), user.get("display_name")}:
+        metadata = user.get("metadata") if isinstance(user.get("metadata"), dict) else {}
+        candidates = [
+            user.get("username"),
+            user.get("display_name"),
+            metadata.get("team_name"),
+            user.get("user_id"),
+        ]
+        if any(_norm(candidate) == needle for candidate in candidates):
             user_id = user.get("user_id")
             break
     if user_id is None:
@@ -45,6 +55,13 @@ def find_roster_id_for_username(snapshot: dict[str, Any], username: str) -> int 
         if roster.get("owner_id") == user_id:
             return int(roster["roster_id"])
     return None
+
+
+def _norm(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    return text or None
 
 
 def build_pick_inventory(

@@ -1,21 +1,18 @@
-# Yellow Sleeper trade policy + live league
+# Mifflin Doty Dynasty — live league config
 sleeper_league_id: "1312121399602581504"
 sleeper_username: BradSchwarzkopf
 league_format: 14-team SF PPR 0.5 TEP
 tep: 0.5
 xlsx_enabled: false
-# xlsx_path: ./values.xlsx
 cache_dir: .cache
 
 policy_override:
   hard_untouchables:
     - Drake London
     - Harold Fannin
-
   protected_players:
     - Jayden Daniels
     - Jaxon Smith-Njigba
-
   protected_pick_patterns:
     - 2027 1st
     - 2028 1st

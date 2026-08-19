@@ -19,11 +19,12 @@ from ..server import mcp
 async def dynasty_list_my_picks(
     seasons: list[int] | None = None,
     include_traded_away: bool = False,
+    as_user: str | None = None,
 ) -> dict:
-    """Return Brad's native, traded-in, and optionally traded-away picks."""
+    """Return native, traded-in, and optionally traded-away picks for a roster."""
     runtime = await get_runtime()
     snapshot, _ = await runtime.snapshot()
-    username = runtime.config.static.sleeper_username
+    username = runtime.username(as_user)
     my_roster_id = find_roster_id_for_username(snapshot, username)
     if my_roster_id is None:
         return ListMyPicksOutput(
