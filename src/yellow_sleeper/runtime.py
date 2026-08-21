@@ -100,7 +100,7 @@ def create_runtime() -> Runtime:
         cache=cache,
         http=http,
         sleeper=SleeperClient(http),
-        fantasycalc=FantasyCalcClient(http),
+        fantasycalc=FantasyCalcClient(http, tep_tier=config.static.tep_tier),
     )
 
 
