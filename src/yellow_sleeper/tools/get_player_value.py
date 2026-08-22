@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Literal
 
 from ..analyze.pipelines import get_player_value_output
+from ..analyze.value import load_overlay_values
 from ..runtime import format_cache_error, get_runtime
 from ..server import mcp
 
@@ -15,6 +16,8 @@ async def dynasty_get_player_value(
     """Return a player's value with source and resolution details."""
     runtime = await get_runtime()
     players, _ = await runtime.players()
+    static = runtime.config.static
+    overlay = load_overlay_values(static.values_overlay_path)
     if valuation_source == "xlsx":
         values = []
         values_cache_status = "fresh"
@@ -31,5 +34,9 @@ async def dynasty_get_player_value(
         valuation_source=valuation_source,
         values_cache_status=values_cache_status,
         values_cache_error=values_cache_error,
+        overlay=overlay,
+        overlay_precedence=static.overlay_precedence,
+        overlay_disagreement_pct=static.overlay_disagreement_pct,
+        tep_tier=static.tep_tier,
     )
     return output.model_dump(mode="json")

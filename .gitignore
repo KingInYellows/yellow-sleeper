@@ -1,9 +1,12 @@
 .cache/
 .claude/
+.cursor/
 .pytest_cache/
 .ruff_cache/
 .ruvector/
 .venv/
+.yellow-sleeper.yaml
+.yellow-sleeper-values.csv
 __pycache__/
 *.py[cod]
 *.egg-info/

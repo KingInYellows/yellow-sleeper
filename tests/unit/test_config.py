@@ -53,7 +53,21 @@ def test_config_precedence_yaml_over_env_and_override_over_yaml(tmp_path: Path) 
     assert sources[0] == "tool_argument"
 
 
-def test_config_reload_failure_preserves_previous_policy(tmp_path: Path) -> None:
+def test_config_tep_tier_and_overlay_from_env(tmp_path: Path) -> None:
+    config = load_config(
+        env={
+            "YELLOW_SLEEPER_TEP_TIER": "te++",
+            "YELLOW_SLEEPER_VALUES_OVERLAY_PATH": str(tmp_path / "vals.csv"),
+            "YELLOW_SLEEPER_OVERLAY_PRECEDENCE": "fc_wins",
+            "YELLOW_SLEEPER_OVERLAY_DISAGREEMENT_PCT": "12.5",
+        },
+        config_path=tmp_path / "missing.yaml",
+    )
+    assert config.static.tep_tier == "te++"
+    assert config.static.values_overlay_path == tmp_path / "vals.csv"
+    assert config.static.overlay_precedence == "fc_wins"
+    assert config.static.overlay_disagreement_pct == 12.5
+
     config_path = tmp_path / ".yellow-sleeper.yaml"
     config_path.write_text("hard_untouchables:\n  - Drake London\n", encoding="utf-8")
     config = load_config(env={}, config_path=config_path)

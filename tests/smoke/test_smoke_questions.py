@@ -117,3 +117,106 @@ def test_smoke_6_best_player_available_excludes_drafted_rookies() -> None:
         "not_already_drafted:true" in candidate.inclusion_reasons
         for candidate in result.candidates
     )
+
+
+def test_smoke_7_pick_ladder_differentiates_early_vs_late(sleeper_snapshot: dict) -> None:
+    from yellow_sleeper.analyze.value import match_fantasycalc_pick, pick_records_by_name
+    from yellow_sleeper.models import Pick
+
+    values = load_fixture("fantasycalc/values_current.json")
+    pick_index = pick_records_by_name(values)
+    pick = Pick(
+        pick_token="pick_2027_r1_orig11",
+        display_name="2027 1st",
+        season=2027,
+        round=1,
+        original_owner_roster_id=11,
+        original_owner_name="Brad",
+        current_owner_roster_id=11,
+        origin="native",
+    )
+    early = match_fantasycalc_pick(pick, pick_index, projected_slot=1)
+    late = match_fantasycalc_pick(pick, pick_index, projected_slot=14)
+    generic = match_fantasycalc_pick(pick, pick_index)
+    assert early is not None and late is not None and generic is not None
+    assert early.value == 4500
+    assert late.value == 2200
+    assert generic.value == 3000
+
+    result = analyze_trade_pipeline(
+        my_send=["2027 3rd"],
+        my_receive=["Jaylen Wright"],
+        policy=DynamicPolicy(),
+        snapshot=sleeper_snapshot,
+        players=load_fixture("sleeper/players_nfl.json"),
+        values=values,
+        sleeper_username="brad",
+        overlay={"11620": 5000.0},
+        overlay_precedence="overlay_wins",
+    )
+    assert result.value_math is not None
+    send_asset = next(item for item in result.value_math.per_asset if item["side"] == "send")
+    # No FC 2027 3rd ladder row → static config_pick_table fallback.
+    assert send_asset["value"] == 600
+    assert send_asset["sources"][0].source == "config_pick_table"
+    assert any(note.field == "value_math.fantasycalc" for note in result.source_notes)
+    assert any(
+        note.field == "value_math.xlsx" and note.source == "xlsx" for note in result.source_notes
+    )
+    assert result.value_math.delta_min is not None
+    assert result.value_math.delta_max is not None
+
+
+def test_smoke_8_overlay_wins_and_source_disagreement(sleeper_snapshot: dict) -> None:
+    from yellow_sleeper.analyze.pipelines import get_player_value_output
+
+    result = get_player_value_output(
+        player="Harold Fannin",
+        players=load_fixture("sleeper/players_nfl.json"),
+        values=load_fixture("fantasycalc/values_current.json"),
+        valuation_source="auto",
+        overlay={"9991": 5000.0},
+        overlay_precedence="overlay_wins",
+        overlay_disagreement_pct=10.0,
+        tep_tier="te+",
+    )
+    assert result.value == 5000
+    assert result.source_disagreement is not None
+    assert any(note.source == "xlsx" and note.field == "value" for note in result.source_notes)
+    assert any(flag.type.value == "source_disagreement" for flag in result.policy_flags)
+
+
+def test_smoke_8b_overlay_fallback_when_fc_missing() -> None:
+    from yellow_sleeper.analyze.pipelines import get_player_value_output
+
+    result = get_player_value_output(
+        player="Jaylen Wright",
+        players=load_fixture("sleeper/players_nfl.json"),
+        values=[],  # no FantasyCalc board
+        valuation_source="auto",
+        overlay={"11620": 1234.0},
+        overlay_precedence="fc_wins",
+        tep_tier="te+",
+    )
+    assert result.value == 1234.0
+    assert any(note.source == "xlsx" and note.field == "value" for note in result.source_notes)
+
+
+def test_smoke_9_conditional_trade_flags_and_partial_range(sleeper_snapshot: dict) -> None:
+    result = analyze_trade_pipeline(
+        my_send=["Jaylen Wright if he plays 10 games"],
+        my_receive=["2027 1st"],
+        policy=DynamicPolicy(),
+        snapshot=sleeper_snapshot,
+        players=load_fixture("sleeper/players_nfl.json"),
+        values=load_fixture("fantasycalc/values_current.json"),
+        sleeper_username="brad",
+    )
+    assert any(flag.type.value == "conditional_or_swap_trade" for flag in result.policy_flags)
+    assert result.resolution_status == ResolutionStatus.NEEDS_CLARIFICATION
+    assert result.data_status == DataStatus.PARTIAL
+    assert result.value_math is not None
+    assert result.value_math.delta_min is not None
+    assert result.value_math.delta_max is not None
+    # Condition false omits the send player; bounds must diverge from a point-only trade.
+    assert result.value_math.delta_min != result.value_math.delta_max

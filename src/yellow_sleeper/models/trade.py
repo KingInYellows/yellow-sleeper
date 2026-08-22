@@ -14,6 +14,8 @@ class ValueMath(BaseModel):
     receive_total: float | None = None
     delta: float | None = None
     delta_pct: float | None = None
+    delta_min: float | None = None
+    delta_max: float | None = None
     per_asset: list[dict[str, Any]] = Field(default_factory=list)
     source_disagreement: SourceDisagreement | None = None
 

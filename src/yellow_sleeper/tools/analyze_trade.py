@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..analyze.pipelines import analyze_trade_pipeline
+from ..analyze.value import load_overlay_values
 from ..models import PolicyOverride
 from ..runtime import format_cache_error, get_runtime
 from ..server import mcp
@@ -19,6 +20,8 @@ async def dynasty_analyze_trade(
     snapshot, _ = await runtime.snapshot()
     players, _ = await runtime.players()
     values_result = await runtime.values_result()
+    static = runtime.config.static
+    overlay = load_overlay_values(static.values_overlay_path)
     output = analyze_trade_pipeline(
         my_send=my_send,
         my_receive=my_receive,
@@ -26,9 +29,13 @@ async def dynasty_analyze_trade(
         snapshot=snapshot,
         players=players,
         values=values_result.data,
-        sleeper_username=runtime.config.static.sleeper_username,
+        sleeper_username=static.sleeper_username,
         config_sources=config_sources,
         values_cache_status=values_result.status,
         values_cache_error=format_cache_error(values_result.error),
+        overlay=overlay,
+        overlay_precedence=static.overlay_precedence,
+        overlay_disagreement_pct=static.overlay_disagreement_pct,
+        tep_tier=static.tep_tier,
     )
     return output.model_dump(mode="json")

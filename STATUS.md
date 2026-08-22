@@ -160,3 +160,20 @@ What's next:
 
 Blockers:
 - None.
+
+## 2026-08-21 — Stage 2 value accuracy (S2-1 through S2-4)
+
+Current milestone: Stage 2 accuracy track complete on branch.
+
+What was just completed:
+- S2-1: `tep_tier` config + FantasyCalc `tep=te+` + TECHNICAL_SPEC §4 reconcile.
+- S2-2: FantasyCalc pick ladder matcher with static round-table fallback.
+- S2-3: CSV overlay loader (`source=xlsx`) with `overlay_wins` + `source_disagreement`.
+- S2-4: Conditional/pick-swap detection, `delta_min`/`delta_max` scenario ranges.
+- Tests: unit + integration + smoke (64 passing).
+
+What's next:
+- Human review of Stage 2 PR; optional live MCP smoke against real league cache.
+
+Blockers:
+- None.

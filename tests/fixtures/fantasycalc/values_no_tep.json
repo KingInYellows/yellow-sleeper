@@ -1,0 +1,4 @@
+[
+  {"player": {"id": 9745, "name": "Drake London", "sleeperId": "9745", "position": "WR"}, "value": 8200, "overallRank": 12, "positionRank": 5, "redraftValue": 7800, "trend30Day": 120},
+  {"player": {"id": 9991, "name": "Harold Fannin", "sleeperId": "9991", "position": "TE"}, "value": 3600, "overallRank": 120, "positionRank": 14, "redraftValue": 1000, "trend30Day": 20}
+]

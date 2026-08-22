@@ -9,7 +9,7 @@ from typing import Any
 
 from rapidfuzz import fuzz
 
-from ..clients.fantasycalc import FCRecord
+from ..clients.fantasycalc import FCRecord, tep_source_explanation
 from ..config import DynamicPolicy
 from ..models import (
     AgeStats,
@@ -55,8 +55,10 @@ from .roster import (
     find_roster_id_for_username,
 )
 from .value import (
-    PICK_VALUE_BY_ROUND,
+    merge_player_value,
     parse_value_records,
+    pick_records_by_name,
+    pick_value_range,
     pick_value_source,
     player_value_source,
     source_disagreement,
@@ -273,34 +275,55 @@ def get_player_value_output(
     valuation_source: str = "auto",
     values_cache_status: str = "cached",
     values_cache_error: str | None = None,
+    overlay: Mapping[str, float] | None = None,
+    overlay_precedence: str = "overlay_wins",
+    overlay_disagreement_pct: float = 10.0,
+    tep_tier: str = "te+",
 ) -> GetPlayerValueOutput:
     resolution = resolve_player(player, players)
     fantasycalc_enabled = valuation_source != "xlsx"
     value_index = values_by_sleeper_id(values) if fantasycalc_enabled else {}
+    overlay_map = dict(overlay or {})
     flags: list[PolicyFlag] = []
     candidates = resolution.candidates if resolution.manual_review else []
     value = None
-    sources = []
-    missing = []
+    sources: list = []
+    missing: list[str] = []
+    disagreement = None
     if resolution.resolved_id:
-        if fantasycalc_enabled:
-            source = player_value_source(resolution.resolved_id, value_index)
-            missing_source = "fantasycalc"
-        else:
-            source = value_source("xlsx", None, enabled=False)
-            missing_source = "xlsx"
-        sources = [source]
-        value = source.value
+        value, sources, disagreement, missing = merge_player_value(
+            resolution.resolved_id,
+            value_index,
+            overlay_map,
+            valuation_source=valuation_source,
+            overlay_precedence=overlay_precedence,  # type: ignore[arg-type]
+            disagreement_pct=overlay_disagreement_pct,
+        )
         if value is None:
-            missing.append(missing_source)
             flags.append(_missing_value_flag(player))
+        if disagreement is not None:
+            flags.append(
+                PolicyFlag(
+                    type=FlagType.SOURCE_DISAGREEMENT,
+                    asset=player,
+                    rule_source="computed",
+                    severity=FlagSeverity.INFO,
+                    reason=(
+                        f"Value sources disagree by {disagreement.max_delta_pct}% "
+                        f"(threshold {overlay_disagreement_pct}%)."
+                    ),
+                )
+            )
     if fantasycalc_enabled:
         flags.extend(_value_cache_flags(values_cache_status, values_cache_error))
     cache_status = values_cache_status if fantasycalc_enabled else CACHE_STATUS_FRESH
-    source_note_explanation = (
-        values_cache_error
-        if fantasycalc_enabled
-        else "XLSX valuation source is not implemented in MVP."
+    primary_source, source_note_explanation = _player_value_provenance(
+        value,
+        sources,
+        fantasycalc_enabled=fantasycalc_enabled,
+        has_overlay=bool(overlay_map),
+        tep_tier=tep_tier,
+        values_cache_error=values_cache_error,
     )
     data_status = _with_stale_data_status(
         _value_data_status(bool(resolution.resolved_id), value is not None),
@@ -314,7 +337,7 @@ def get_player_value_output(
         source_notes=[
             _source_note(
                 "value",
-                "fantasycalc" if fantasycalc_enabled else "xlsx",
+                primary_source,
                 cache_status=cache_status,
                 explanation=source_note_explanation,
             )
@@ -323,6 +346,7 @@ def get_player_value_output(
         name=_resolved_player_name(resolution.resolved_id, players),
         value=value,
         value_sources=sources,
+        source_disagreement=disagreement,
         missing_values=missing,
         candidates=candidates,
     )
@@ -340,9 +364,15 @@ def analyze_trade_pipeline(
     config_sources: list[str] | None = None,
     values_cache_status: str = "cached",
     values_cache_error: str | None = None,
+    overlay: Mapping[str, float] | None = None,
+    overlay_precedence: str = "overlay_wins",
+    overlay_disagreement_pct: float = 10.0,
+    tep_tier: str = "te+",
 ) -> AnalyzeTradeOutput:
     value_records = parse_value_records(values)
     value_index = values_by_sleeper_id(value_records)
+    pick_index = pick_records_by_name(value_records)
+    overlay_map = dict(overlay or {})
     my_roster_id = find_roster_id_for_username(snapshot, sleeper_username) or 0
     inventory = build_pick_inventory(
         snapshot,
@@ -361,6 +391,22 @@ def analyze_trade_pipeline(
     blocking_rules = _blocking_rules(my_send, send_resolutions, players, policy)
     resolution_status = _resolution_status(asset_resolutions)
     flags = _trade_policy_flags(asset_resolutions, policy, players, current_season(snapshot))
+    conditional = _detect_conditional_or_swap(my_send + my_receive)
+    if conditional:
+        flags.append(
+            PolicyFlag(
+                type=FlagType.CONDITIONAL_OR_SWAP_TRADE,
+                asset=None,
+                rule_source="computed",
+                severity=FlagSeverity.WARNING,
+                reason=(
+                    "Trade input includes conditional or pick-swap language; "
+                    "value_math may include scenario delta_min/delta_max ranges."
+                ),
+            )
+        )
+        if _conditional_needs_clarification(my_send + my_receive):
+            resolution_status = ResolutionStatus.NEEDS_CLARIFICATION
 
     if blocking_rules:
         return AnalyzeTradeOutput(
@@ -376,7 +422,7 @@ def analyze_trade_pipeline(
             roster_context=None,
         )
 
-    if resolution_status == ResolutionStatus.NEEDS_CLARIFICATION:
+    if resolution_status == ResolutionStatus.NEEDS_CLARIFICATION and not conditional:
         flags.extend(_ambiguous_flags(asset_resolutions))
         return AnalyzeTradeOutput(
             policy_status=PolicyStatus.OK,
@@ -390,11 +436,58 @@ def analyze_trade_pipeline(
             roster_context=None,
         )
 
+    if resolution_status == ResolutionStatus.NEEDS_CLARIFICATION and conditional:
+        flags.extend(_ambiguous_flags(asset_resolutions))
+        # Still attempt scenario ranges when assets partially resolve.
+        value_math, missing_assets = _trade_value_math(
+            send_resolutions,
+            receive_resolutions,
+            inventory,
+            value_index,
+            pick_index=pick_index,
+            overlay=overlay_map,
+            overlay_precedence=overlay_precedence,
+            overlay_disagreement_pct=overlay_disagreement_pct,
+            include_scenario_range=True,
+        )
+        flags.extend(_missing_value_flags(missing_assets))
+        flags.extend(_value_cache_flags(values_cache_status, values_cache_error))
+        conditional_data_status = _trade_data_status(value_math, missing_assets)
+        if conditional_data_status == DataStatus.COMPLETE:
+            # Conditionals remain PARTIAL even when values resolve: triggers are unverified.
+            conditional_data_status = DataStatus.PARTIAL
+        return AnalyzeTradeOutput(
+            policy_status=PolicyStatus.OK,
+            resolution_status=resolution_status,
+            data_status=conditional_data_status,
+            policy_flags=flags,
+            source_notes=[
+                _source_note("asset_resolution", "sleeper"),
+                *_value_math_source_notes(
+                    values_cache_status=values_cache_status,
+                    values_cache_error=values_cache_error,
+                    tep_tier=tep_tier,
+                    overlay=overlay_map,
+                    overlay_precedence=overlay_precedence,
+                    overlay_disagreement_pct=overlay_disagreement_pct,
+                ),
+            ],
+            config_sources=config_sources or [],
+            asset_resolution=asset_resolutions,
+            value_math=value_math,
+            roster_context=None,
+        )
+
     value_math, missing_assets = _trade_value_math(
         send_resolutions,
         receive_resolutions,
         inventory,
         value_index,
+        pick_index=pick_index,
+        overlay=overlay_map,
+        overlay_precedence=overlay_precedence,
+        overlay_disagreement_pct=overlay_disagreement_pct,
+        include_scenario_range=conditional or _trade_has_picks(asset_resolutions),
     )
     flags.extend(_missing_value_flags(missing_assets))
     flags.extend(_value_cache_flags(values_cache_status, values_cache_error))
@@ -415,11 +508,13 @@ def analyze_trade_pipeline(
         policy_flags=flags,
         source_notes=[
             _source_note("asset_resolution", "sleeper"),
-            _source_note(
-                "value_math",
-                "fantasycalc",
-                cache_status=values_cache_status,
-                explanation=values_cache_error,
+            *_value_math_source_notes(
+                values_cache_status=values_cache_status,
+                values_cache_error=values_cache_error,
+                tep_tier=tep_tier,
+                overlay=overlay_map,
+                overlay_precedence=overlay_precedence,
+                overlay_disagreement_pct=overlay_disagreement_pct,
             ),
             _source_note(
                 "roster_context.age_stats",
@@ -443,7 +538,9 @@ def league_power_map_output(
     values_cache_status: str = "cached",
     values_cache_error: str | None = None,
 ) -> LeaguePowerMapOutput:
-    value_index = values_by_sleeper_id(values)
+    value_records = parse_value_records(values)
+    value_index = values_by_sleeper_id(value_records)
+    pick_index = pick_records_by_name(value_records) if include_pick_value else {}
     names = _user_by_owner(snapshot)
     teams: list[TeamRollup] = []
     missing_any = False
@@ -471,7 +568,9 @@ def league_power_map_output(
                 positional_rollups=rollups,  # type: ignore[arg-type]
                 roster_total=roster_total,
                 pick_total=(
-                    _pick_total(snapshot, int(roster["roster_id"])) if include_pick_value else None
+                    _pick_total(snapshot, int(roster["roster_id"]), pick_index=pick_index)
+                    if include_pick_value
+                    else None
                 ),
                 roster_age=_age_stats(roster_players, roster_players),
                 missing_flags=missing[:10],
@@ -672,6 +771,59 @@ def _truncate(value: str, limit: int = 500) -> str:
     return value[:limit]
 
 
+def _player_value_provenance(
+    value: float | None,
+    sources: list[Any],
+    *,
+    fantasycalc_enabled: bool,
+    has_overlay: bool,
+    tep_tier: str,
+    values_cache_error: str | None,
+) -> tuple[str, str]:
+    """Pick the source note that matches the returned player value."""
+    xlsx_note = "Local CSV/sheet overlay (contract source name xlsx)."
+    if not fantasycalc_enabled:
+        return (
+            "xlsx",
+            xlsx_note if has_overlay else "XLSX/CSV overlay path is empty or missing.",
+        )
+
+    fc_value = next(
+        (
+            float(source.value)
+            for source in sources
+            if source.source == "fantasycalc" and source.value is not None
+        ),
+        None,
+    )
+    xlsx_value = next(
+        (
+            float(source.value)
+            for source in sources
+            if source.source == "xlsx" and source.value is not None
+        ),
+        None,
+    )
+    fc_note = values_cache_error or tep_source_explanation(tep_tier)  # type: ignore[arg-type]
+
+    if value is None:
+        return "fantasycalc", fc_note
+
+    point = float(value)
+    if xlsx_value is not None and point == xlsx_value and fc_value != point:
+        return "xlsx", xlsx_note
+    if fc_value is not None and point == fc_value:
+        return "fantasycalc", fc_note
+    if fc_value is not None and xlsx_value is not None:
+        return (
+            "fantasycalc",
+            "Blended FantasyCalc and local CSV/sheet overlay (xlsx).",
+        )
+    if xlsx_value is not None:
+        return "xlsx", xlsx_note
+    return "fantasycalc", fc_note
+
+
 def _source_note(
     field: str,
     source: str,
@@ -691,6 +843,40 @@ def _source_note(
         stale=stale,
         explanation=_truncate(note_explanation) if note_explanation else None,
     )
+
+
+def _value_math_source_notes(
+    *,
+    values_cache_status: str,
+    values_cache_error: str | None,
+    tep_tier: str,
+    overlay: Mapping[str, float],
+    overlay_precedence: str,
+    overlay_disagreement_pct: float,
+) -> list[SourceNote]:
+    """Provenance for trade value_math: FantasyCalc and/or CSV overlay."""
+    notes = [
+        _source_note(
+            "value_math.fantasycalc",
+            "fantasycalc",
+            cache_status=values_cache_status,
+            explanation=values_cache_error or tep_source_explanation(tep_tier),  # type: ignore[arg-type]
+        )
+    ]
+    if overlay:
+        notes.append(
+            _source_note(
+                "value_math.xlsx",
+                "xlsx",
+                cache_status=CACHE_STATUS_FRESH,
+                explanation=(
+                    f"CSV/sheet overlay active for {len(overlay)} sleeper_id(s); "
+                    f"precedence={overlay_precedence}; "
+                    f"disagreement_threshold_pct={overlay_disagreement_pct}."
+                ),
+            )
+        )
+    return notes
 
 
 def _player_record(player_id: str, players: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -778,19 +964,31 @@ def _resolve_asset(
     players: Mapping[str, Any],
     season: int,
 ) -> AssetResolution:
-    parsed = parse_pick_description(asset, current_season=season, draft_active=False)
+    lookup = _strip_conditional_clause(asset)
+    parsed = parse_pick_description(lookup, current_season=season, draft_active=False)
     pickish = parsed.round is not None or any(
-        token in asset.lower() for token in ["pick", "1st", "2nd"]
+        token in lookup.lower() for token in ["pick", "1st", "2nd"]
     )
     if pickish:
-        return resolve_pick_description(
-            asset,
+        resolution = resolve_pick_description(
+            lookup,
             owned_picks=inventory.owned_picks,
             league_picks=inventory.league_picks,
             current_season=season,
             side=side,
         )
-    return resolve_player(asset, players)
+    else:
+        resolution = resolve_player(lookup, players)
+    # Preserve the original trade-input string for flags/provenance.
+    return resolution.model_copy(update={"input": asset})
+
+
+def _strip_conditional_clause(asset: str) -> str:
+    """Return the base asset name with trailing if/unless/when clauses removed."""
+    base = _CONDITIONAL_RE.split(asset, maxsplit=1)[0].strip()
+    # Drop dangling openers left by forms like "2027 1st (if ...)".
+    base = re.sub(r"[\s(\[{]+$", "", base).strip()
+    return base or asset
 
 
 def _resolution_status(resolutions: list[AssetResolution]) -> ResolutionStatus:
@@ -909,41 +1107,93 @@ def _trade_value_math(
     receive: list[AssetResolution],
     inventory: PickInventory,
     value_index: dict[str, FCRecord],
+    *,
+    pick_index: Mapping[str, FCRecord] | None = None,
+    overlay: Mapping[str, float] | None = None,
+    overlay_precedence: str = "overlay_wins",
+    overlay_disagreement_pct: float = 10.0,
+    include_scenario_range: bool = False,
 ) -> tuple[ValueMath, list[str]]:
+    pick_map = dict(pick_index or {})
+    overlay_map = dict(overlay or {})
     per_asset = []
-    send_total = 0.0
-    receive_total = 0.0
+    send_legs: list[tuple[float, float, float, bool]] = []
+    receive_legs: list[tuple[float, float, float, bool]] = []
     missing_assets = []
     disagreements = []
     for side, resolutions in [("send", send), ("receive", receive)]:
         for resolution in resolutions:
-            value_source = _asset_value_source(resolution, inventory, value_index)
-            value = value_source.value
+            value_src, low, high = _asset_value_bundle(
+                resolution,
+                inventory,
+                value_index,
+                pick_map,
+                overlay_map,
+                overlay_precedence=overlay_precedence,
+                overlay_disagreement_pct=overlay_disagreement_pct,
+            )
+            value = value_src.value
+            sources = [value_src]
+            if (
+                resolution.asset_type == "player"
+                and resolution.resolved_id
+                and overlay_map
+                and resolution.resolved_id in overlay_map
+            ):
+                _, merged_sources, disagreement, _ = merge_player_value(
+                    resolution.resolved_id,
+                    value_index,
+                    overlay_map,
+                    valuation_source="auto",
+                    overlay_precedence=overlay_precedence,  # type: ignore[arg-type]
+                    disagreement_pct=overlay_disagreement_pct,
+                )
+                sources = merged_sources
+                if disagreement is not None:
+                    disagreements.append(disagreement)
             per_asset.append(
                 {
                     "asset": resolution.resolved_id,
                     "side": side,
                     "value": value,
-                    "sources": [value_source],
+                    "value_min": low,
+                    "value_max": high,
+                    "sources": sources,
                 }
             )
             if value is None:
                 missing_assets.append(resolution.input)
                 continue
+            point = float(value)
+            low_v = float(low if low is not None else point)
+            high_v = float(high if high is not None else point)
+            leg = (point, low_v, high_v, _asset_is_conditional(resolution.input))
             if side == "send":
-                send_total += value
+                send_legs.append(leg)
             else:
-                receive_total += value
-            disagreement = source_disagreement([value_source])
-            if disagreement is not None:
+                receive_legs.append(leg)
+            disagreement = source_disagreement(
+                sources,
+                threshold_pct=overlay_disagreement_pct,
+            )
+            if disagreement is not None and disagreement not in disagreements:
                 disagreements.append(disagreement)
+
+    send_total = sum(point for point, _, _, _ in send_legs)
+    receive_total = sum(point for point, _, _, _ in receive_legs)
     delta = receive_total - send_total
+    delta_min: float | None = None
+    delta_max: float | None = None
+    if include_scenario_range:
+        delta_min, delta_max = _scenario_delta_bounds(send_legs, receive_legs)
     return (
         ValueMath(
             send_total=round(send_total, 2),
             receive_total=round(receive_total, 2),
             delta=round(delta, 2),
             delta_pct=round(delta / send_total * 100, 2) if send_total else None,
+            delta_min=round(delta_min, 2) if delta_min is not None else None,
+            delta_max=round(delta_max, 2) if delta_max is not None else None,
             per_asset=per_asset,
             source_disagreement=disagreements[0] if disagreements else None,
         ),
@@ -951,18 +1201,121 @@ def _trade_value_math(
     )
 
 
-def _asset_value_source(
+def _asset_is_conditional(asset: str) -> bool:
+    return bool(_CONDITIONAL_RE.search(asset))
+
+
+def _scenario_delta_bounds(
+    send_legs: list[tuple[float, float, float, bool]],
+    receive_legs: list[tuple[float, float, float, bool]],
+) -> tuple[float, float]:
+    """Expand delta across pick bands and conditional include/exclude outcomes.
+
+    Condition-true keeps conditional assets at their resolved values.
+    Condition-false omits those assets (trigger did not fire / asset does not move).
+    Within each outcome, pick early/late bands still widen the delta envelope.
+    """
+
+    def side_bounds(
+        legs: list[tuple[float, float, float, bool]], *, include_conditional: bool
+    ) -> tuple[float, float]:
+        low = 0.0
+        high = 0.0
+        for _, leg_low, leg_high, is_conditional in legs:
+            if is_conditional and not include_conditional:
+                continue
+            low += leg_low
+            high += leg_high
+        return low, high
+
+    has_conditional = any(is_cond for *_, is_cond in send_legs + receive_legs)
+    include_flags = (True, False) if has_conditional else (True,)
+    deltas: list[float] = []
+    for include_conditional in include_flags:
+        send_low, send_high = side_bounds(send_legs, include_conditional=include_conditional)
+        recv_low, recv_high = side_bounds(receive_legs, include_conditional=include_conditional)
+        deltas.append(recv_low - send_high)
+        deltas.append(recv_high - send_low)
+    return min(deltas), max(deltas)
+
+
+def _asset_value_bundle(
     resolution: AssetResolution,
     inventory: PickInventory,
     value_index: dict[str, FCRecord],
-):
+    pick_index: Mapping[str, FCRecord],
+    overlay: Mapping[str, float],
+    *,
+    overlay_precedence: str,
+    overlay_disagreement_pct: float,
+) -> tuple[Any, float | None, float | None]:
     if resolution.asset_type == "player" and resolution.resolved_id:
-        return player_value_source(resolution.resolved_id, value_index)
+        value, sources, _, _ = merge_player_value(
+            resolution.resolved_id,
+            value_index,
+            overlay,
+            valuation_source="auto",
+            overlay_precedence=overlay_precedence,  # type: ignore[arg-type]
+            disagreement_pct=overlay_disagreement_pct,
+        )
+        src = sources[0] if sources else player_value_source(resolution.resolved_id, value_index)
+        # Prefer chosen merged value on the primary source view.
+        if value is not None:
+            src = value_source(src.source, value, timestamp=src.timestamp, enabled=True)
+        return src, value, value
     pick = next(
         (pick for pick in inventory.league_picks if pick.pick_token == resolution.resolved_id),
         None,
     )
-    return pick_value_source(pick.round if pick else 0)
+    src = pick_value_source(
+        pick.round if pick else 0,
+        pick=pick,
+        pick_index=pick_index,
+    )
+    if pick is None:
+        return src, src.value, src.value
+    point, low, high = pick_value_range(pick, pick_index)
+    if src.value is None and point is not None:
+        src = value_source("config_pick_table", point, enabled=True)
+    return src, low if low is not None else src.value, high if high is not None else src.value
+
+
+def _asset_value_source(
+    resolution: AssetResolution,
+    inventory: PickInventory,
+    value_index: dict[str, FCRecord],
+    pick_index: Mapping[str, FCRecord] | None = None,
+):
+    src, _, _ = _asset_value_bundle(
+        resolution,
+        inventory,
+        value_index,
+        pick_index or {},
+        {},
+        overlay_precedence="overlay_wins",
+        overlay_disagreement_pct=10.0,
+    )
+    return src
+
+
+def _trade_has_picks(resolutions: list[AssetResolution]) -> bool:
+    return any(resolution.asset_type == "pick" for resolution in resolutions)
+
+
+_CONDITIONAL_RE = re.compile(
+    r"\b(if|unless|when|whenever|conditional)\b",
+    re.IGNORECASE,
+)
+_SWAP_RE = re.compile(r"\b(swap|pick\s*swap)\b", re.IGNORECASE)
+
+
+def _detect_conditional_or_swap(assets: list[str]) -> bool:
+    return any(_CONDITIONAL_RE.search(asset) or _SWAP_RE.search(asset) for asset in assets)
+
+
+def _conditional_needs_clarification(assets: list[str]) -> bool:
+    """Conditionals with unresolved triggers need clarification; pure swap language does not."""
+    return any(_CONDITIONAL_RE.search(asset) for asset in assets)
 
 
 def _trade_data_status(value_math: ValueMath, missing_assets: list[str]) -> DataStatus:
@@ -1101,9 +1454,20 @@ def _user_by_owner(snapshot: dict[str, Any]) -> dict[int, dict[str, str]]:
     return result
 
 
-def _pick_total(snapshot: dict[str, Any], roster_id: int) -> float:
+def _pick_total(
+    snapshot: dict[str, Any],
+    roster_id: int,
+    *,
+    pick_index: Mapping[str, FCRecord] | None = None,
+) -> float:
     inventory = build_pick_inventory(snapshot, my_roster_id=roster_id)
-    return sum(PICK_VALUE_BY_ROUND.get(pick.round, 0.0) for pick in inventory.owned_picks)
+    index = dict(pick_index or {})
+    total = 0.0
+    for pick in inventory.owned_picks:
+        src = pick_value_source(pick.round, pick=pick, pick_index=index)
+        if src.value is not None:
+            total += float(src.value)
+    return total
 
 
 def _context_summary(rollups: dict[str, float], players: list[RosterPlayer]) -> str:
