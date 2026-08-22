@@ -52,14 +52,14 @@ async def test_fantasycalc_malformed_response_falls_back_to_stale_cache(
 ) -> None:
     cached = load_fixture("fantasycalc/values_current.json")
     cache = Cache(tmp_path)
-    await cache.write("fantasycalc_values", cached)
+    await cache.write("fantasycalc_values", cached, variant="te+")
     old = time.time() - (8 * 60 * 60)
-    os.utime(tmp_path / "fantasycalc_values.json", (old, old))
+    os.utime(tmp_path / "fantasycalc_values__te+.json", (old, old))
     respx.get("https://api.fantasycalc.com/values/current").respond(
         json=[{"player": {"id": 1, "name": "Broken", "position": "WR"}}]
     )
     async with build_shared_client() as http:
-        client = FantasyCalcClient(http)
+        client = FantasyCalcClient(http, tep_tier="te+")
 
         result = await client.get_current_values_cached(cache)
 

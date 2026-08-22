@@ -87,7 +87,13 @@ class FantasyCalcClient:
         async def fetch() -> list[dict]:
             return [record.model_dump(mode="json") for record in await self.get_current_values()]
 
-        return await cache.read_or_fetch("fantasycalc_values", fetch, force=force)
+        # Separate boards by TEP tier so switching tiers cannot serve the wrong TTL cache.
+        return await cache.read_or_fetch(
+            "fantasycalc_values",
+            fetch,
+            force=force,
+            variant=self.tep_tier,
+        )
 
     async def probe(self) -> LiveProbeResult:
         start = time.monotonic()

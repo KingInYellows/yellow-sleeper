@@ -3,6 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from tests.conftest import load_fixture
+from yellow_sleeper.analyze.pipelines import (
+    _scenario_delta_bounds,
+    _strip_conditional_clause,
+    analyze_trade_pipeline,
+)
 from yellow_sleeper.analyze.value import (
     load_overlay_values,
     match_fantasycalc_pick,
@@ -12,6 +17,7 @@ from yellow_sleeper.analyze.value import (
     pick_value_source,
     values_by_sleeper_id,
 )
+from yellow_sleeper.config import DynamicPolicy
 from yellow_sleeper.models import Pick
 
 
@@ -102,3 +108,39 @@ def test_load_overlay_and_merge_overlay_wins(tmp_path: Path) -> None:
     assert disagreement is not None
     assert disagreement.max_delta_pct > 10
     assert missing == []
+
+
+def test_strip_conditional_clause_keeps_base_asset() -> None:
+    assert _strip_conditional_clause("2027 1st (if Team A makes playoffs)") == "2027 1st"
+    assert _strip_conditional_clause("Jaylen Wright if he plays 10 games") == "Jaylen Wright"
+    assert _strip_conditional_clause("Mahomes") == "Mahomes"
+
+
+def test_scenario_delta_bounds_include_vs_exclude_conditional() -> None:
+    # Send conditional player 1000; receive unconditional 3000.
+    send = [(1000.0, 1000.0, 1000.0, True)]
+    receive = [(3000.0, 3000.0, 3000.0, False)]
+    low, high = _scenario_delta_bounds(send, receive)
+    # True: 3000-1000=2000; False: 3000-0=3000
+    assert low == 2000.0
+    assert high == 3000.0
+
+
+def test_trade_conditional_ranges_diverge(sleeper_snapshot: dict) -> None:
+    values = load_fixture("fantasycalc/values_current.json")
+    players = load_fixture("sleeper/players_nfl.json")
+    result = analyze_trade_pipeline(
+        my_send=["Jaylen Wright if he plays 10 games"],
+        my_receive=["2027 1st"],
+        policy=DynamicPolicy(),
+        snapshot=sleeper_snapshot,
+        players=players,
+        values=values,
+        sleeper_username="brad",
+    )
+    assert result.value_math is not None
+    assert result.value_math.delta_min is not None
+    assert result.value_math.delta_max is not None
+    assert result.value_math.delta_min < result.value_math.delta_max
+    # Base player name resolves despite the conditional clause.
+    assert any(res.resolved_id == "11620" for res in result.asset_resolution)

@@ -194,3 +194,8 @@ def test_smoke_9_conditional_trade_flags_and_partial_range(sleeper_snapshot: dic
     assert any(flag.type.value == "conditional_or_swap_trade" for flag in result.policy_flags)
     assert result.resolution_status == ResolutionStatus.NEEDS_CLARIFICATION
     assert result.data_status == DataStatus.PARTIAL
+    assert result.value_math is not None
+    assert result.value_math.delta_min is not None
+    assert result.value_math.delta_max is not None
+    # Condition false omits the send player; bounds must diverge from a point-only trade.
+    assert result.value_math.delta_min != result.value_math.delta_max

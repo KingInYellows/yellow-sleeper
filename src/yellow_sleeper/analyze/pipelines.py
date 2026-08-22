@@ -907,19 +907,31 @@ def _resolve_asset(
     players: Mapping[str, Any],
     season: int,
 ) -> AssetResolution:
-    parsed = parse_pick_description(asset, current_season=season, draft_active=False)
+    lookup = _strip_conditional_clause(asset)
+    parsed = parse_pick_description(lookup, current_season=season, draft_active=False)
     pickish = parsed.round is not None or any(
-        token in asset.lower() for token in ["pick", "1st", "2nd"]
+        token in lookup.lower() for token in ["pick", "1st", "2nd"]
     )
     if pickish:
-        return resolve_pick_description(
-            asset,
+        resolution = resolve_pick_description(
+            lookup,
             owned_picks=inventory.owned_picks,
             league_picks=inventory.league_picks,
             current_season=season,
             side=side,
         )
-    return resolve_player(asset, players)
+    else:
+        resolution = resolve_player(lookup, players)
+    # Preserve the original trade-input string for flags/provenance.
+    return resolution.model_copy(update={"input": asset})
+
+
+def _strip_conditional_clause(asset: str) -> str:
+    """Return the base asset name with trailing if/unless/when clauses removed."""
+    base = _CONDITIONAL_RE.split(asset, maxsplit=1)[0].strip()
+    # Drop dangling openers left by forms like "2027 1st (if ...)".
+    base = re.sub(r"[\s(\[{]+$", "", base).strip()
+    return base or asset
 
 
 def _resolution_status(resolutions: list[AssetResolution]) -> ResolutionStatus:
@@ -1048,12 +1060,8 @@ def _trade_value_math(
     pick_map = dict(pick_index or {})
     overlay_map = dict(overlay or {})
     per_asset = []
-    send_total = 0.0
-    receive_total = 0.0
-    send_min = 0.0
-    send_max = 0.0
-    receive_min = 0.0
-    receive_max = 0.0
+    send_legs: list[tuple[float, float, float, bool]] = []
+    receive_legs: list[tuple[float, float, float, bool]] = []
     missing_assets = []
     disagreements = []
     for side, resolutions in [("send", send), ("receive", receive)]:
@@ -1102,36 +1110,76 @@ def _trade_value_math(
             point = float(value)
             low_v = float(low if low is not None else point)
             high_v = float(high if high is not None else point)
+            leg = (point, low_v, high_v, _asset_is_conditional(resolution.input))
             if side == "send":
-                send_total += point
-                send_min += low_v
-                send_max += high_v
+                send_legs.append(leg)
             else:
-                receive_total += point
-                receive_min += low_v
-                receive_max += high_v
+                receive_legs.append(leg)
             disagreement = source_disagreement(
                 sources,
                 threshold_pct=overlay_disagreement_pct,
             )
             if disagreement is not None and disagreement not in disagreements:
                 disagreements.append(disagreement)
+
+    send_total = sum(point for point, _, _, _ in send_legs)
+    receive_total = sum(point for point, _, _, _ in receive_legs)
     delta = receive_total - send_total
-    delta_min = receive_min - send_max
-    delta_max = receive_max - send_min
+    delta_min: float | None = None
+    delta_max: float | None = None
+    if include_scenario_range:
+        delta_min, delta_max = _scenario_delta_bounds(send_legs, receive_legs)
     return (
         ValueMath(
             send_total=round(send_total, 2),
             receive_total=round(receive_total, 2),
             delta=round(delta, 2),
             delta_pct=round(delta / send_total * 100, 2) if send_total else None,
-            delta_min=round(delta_min, 2) if include_scenario_range else None,
-            delta_max=round(delta_max, 2) if include_scenario_range else None,
+            delta_min=round(delta_min, 2) if delta_min is not None else None,
+            delta_max=round(delta_max, 2) if delta_max is not None else None,
             per_asset=per_asset,
             source_disagreement=disagreements[0] if disagreements else None,
         ),
         missing_assets,
     )
+
+
+def _asset_is_conditional(asset: str) -> bool:
+    return bool(_CONDITIONAL_RE.search(asset))
+
+
+def _scenario_delta_bounds(
+    send_legs: list[tuple[float, float, float, bool]],
+    receive_legs: list[tuple[float, float, float, bool]],
+) -> tuple[float, float]:
+    """Expand delta across pick bands and conditional include/exclude outcomes.
+
+    Condition-true keeps conditional assets at their resolved values.
+    Condition-false omits those assets (trigger did not fire / asset does not move).
+    Within each outcome, pick early/late bands still widen the delta envelope.
+    """
+
+    def side_bounds(
+        legs: list[tuple[float, float, float, bool]], *, include_conditional: bool
+    ) -> tuple[float, float]:
+        low = 0.0
+        high = 0.0
+        for _, leg_low, leg_high, is_conditional in legs:
+            if is_conditional and not include_conditional:
+                continue
+            low += leg_low
+            high += leg_high
+        return low, high
+
+    has_conditional = any(is_cond for *_, is_cond in send_legs + receive_legs)
+    include_flags = (True, False) if has_conditional else (True,)
+    deltas: list[float] = []
+    for include_conditional in include_flags:
+        send_low, send_high = side_bounds(send_legs, include_conditional=include_conditional)
+        recv_low, recv_high = side_bounds(receive_legs, include_conditional=include_conditional)
+        deltas.append(recv_low - send_high)
+        deltas.append(recv_high - send_low)
+    return min(deltas), max(deltas)
 
 
 def _asset_value_bundle(
