@@ -77,9 +77,12 @@ def player_value_source(
     )
 
 
-def roster_pick_band(original_owner_roster_id: int, *, num_teams: int = 14) -> PickBand:
-    """Map original owner roster id into early/mid/late terciles for num_teams."""
-    slot = max(1, min(int(original_owner_roster_id), num_teams))
+def roster_pick_band(projected_slot: int, *, num_teams: int = 14) -> PickBand:
+    """Map a projected draft/finish slot (1..num_teams) into early/mid/late terciles.
+
+    Do **not** pass Sleeper ``roster_id`` here — those IDs are not draft order.
+    """
+    slot = max(1, min(int(projected_slot), num_teams))
     third = max(1, num_teams // 3)
     if slot <= third:
         return "Early"
@@ -92,17 +95,22 @@ def match_fantasycalc_pick(
     pick: Pick,
     pick_index: Mapping[str, FCRecord],
     *,
+    projected_slot: int | None = None,
     num_teams: int = 14,
 ) -> FCRecord | None:
-    """Resolve a Yellow pick to a FantasyCalc PICK row by name conventions."""
+    """Resolve a Yellow pick to a FantasyCalc PICK row by name conventions.
+
+    Without an explicit ``projected_slot`` (finish/draft order), only the generic
+    FantasyCalc row (e.g. ``2027 1st``) is used — never ``original_owner_roster_id``.
+    """
     ordinal = _ROUND_ORDINAL.get(pick.round)
     if ordinal is None:
         return None
-    band = roster_pick_band(pick.original_owner_roster_id, num_teams=num_teams)
-    candidates = [
-        f"{pick.season} {ordinal} ({band})",
-        f"{pick.season} {ordinal}",
-    ]
+    candidates: list[str] = []
+    if projected_slot is not None:
+        band = roster_pick_band(projected_slot, num_teams=num_teams)
+        candidates.append(f"{pick.season} {ordinal} ({band})")
+    candidates.append(f"{pick.season} {ordinal}")
     for name in candidates:
         record = pick_index.get(name.lower())
         if record is not None:
@@ -137,8 +145,15 @@ def pick_value_source(
 def pick_value_range(
     pick: Pick,
     pick_index: Mapping[str, FCRecord],
+    *,
+    projected_slot: int | None = None,
 ) -> tuple[float | None, float | None, float | None]:
-    """Return (point, min, max) using early/mid/late FC ladder when available."""
+    """Return (point, min, max).
+
+    Point uses an explicit projected slot band when provided, otherwise the
+    generic FantasyCalc row. Min/max span early/mid/late when those rows exist
+    so unknown finish order can still surface a scenario range.
+    """
     ordinal = _ROUND_ORDINAL.get(pick.round)
     if ordinal is None:
         fallback = PICK_VALUE_BY_ROUND.get(pick.round)
@@ -148,11 +163,14 @@ def pick_value_range(
         record = pick_index.get(f"{pick.season} {ordinal} ({band})".lower())
         if record is not None:
             band_values.append(float(record.value))
+    matched = match_fantasycalc_pick(pick, pick_index, projected_slot=projected_slot)
     generic = pick_index.get(f"{pick.season} {ordinal}".lower())
-    matched = match_fantasycalc_pick(pick, pick_index)
-    point = float(matched.value) if matched is not None else (
-        float(generic.value) if generic is not None else PICK_VALUE_BY_ROUND.get(pick.round)
-    )
+    if matched is not None:
+        point = float(matched.value)
+    elif generic is not None:
+        point = float(generic.value)
+    else:
+        point = PICK_VALUE_BY_ROUND.get(pick.round)
     if band_values:
         return point, min(band_values), max(band_values)
     return point, point, point

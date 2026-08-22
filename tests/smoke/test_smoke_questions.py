@@ -120,37 +120,28 @@ def test_smoke_6_best_player_available_excludes_drafted_rookies() -> None:
 
 
 def test_smoke_7_pick_ladder_differentiates_early_vs_late(sleeper_snapshot: dict) -> None:
-    from yellow_sleeper.analyze.value import pick_records_by_name, pick_value_source
+    from yellow_sleeper.analyze.value import match_fantasycalc_pick, pick_records_by_name
     from yellow_sleeper.models import Pick
 
     values = load_fixture("fantasycalc/values_current.json")
     pick_index = pick_records_by_name(values)
-    early = Pick(
-        pick_token="pick_2027_r1_orig1",
+    pick = Pick(
+        pick_token="pick_2027_r1_orig11",
         display_name="2027 1st",
         season=2027,
         round=1,
-        original_owner_roster_id=1,
-        original_owner_name="A",
-        current_owner_roster_id=1,
+        original_owner_roster_id=11,
+        original_owner_name="Brad",
+        current_owner_roster_id=11,
         origin="native",
     )
-    late = Pick(
-        pick_token="pick_2027_r1_orig14",
-        display_name="2027 1st",
-        season=2027,
-        round=1,
-        original_owner_roster_id=14,
-        original_owner_name="N",
-        current_owner_roster_id=14,
-        origin="native",
-    )
-    early_src = pick_value_source(1, pick=early, pick_index=pick_index)
-    late_src = pick_value_source(1, pick=late, pick_index=pick_index)
-    assert early_src.source == "fantasycalc"
-    assert late_src.source == "fantasycalc"
-    assert early_src.value == 4500
-    assert late_src.value == 2200
+    early = match_fantasycalc_pick(pick, pick_index, projected_slot=1)
+    late = match_fantasycalc_pick(pick, pick_index, projected_slot=14)
+    generic = match_fantasycalc_pick(pick, pick_index)
+    assert early is not None and late is not None and generic is not None
+    assert early.value == 4500
+    assert late.value == 2200
+    assert generic.value == 3000
 
     result = analyze_trade_pipeline(
         my_send=["2027 3rd"],
@@ -160,11 +151,14 @@ def test_smoke_7_pick_ladder_differentiates_early_vs_late(sleeper_snapshot: dict
         players=load_fixture("sleeper/players_nfl.json"),
         values=values,
         sleeper_username="brad",
+        overlay={"11620": 5000.0},
+        overlay_precedence="overlay_wins",
     )
     assert result.value_math is not None
-    send_asset = next(item for item in result.value_math.per_asset if item["side"] == "send")
-    # No FC 2027 3rd ladder row → static config_pick_table fallback still works.
-    assert send_asset["value"] in {600, 1200, 3000}
+    assert any(note.field == "value_math.fantasycalc" for note in result.source_notes)
+    assert any(
+        note.field == "value_math.xlsx" and note.source == "xlsx" for note in result.source_notes
+    )
     assert result.value_math.delta_min is not None
     assert result.value_math.delta_max is not None
 

@@ -15,6 +15,19 @@ from yellow_sleeper.analyze.value import (
 from yellow_sleeper.models import Pick
 
 
+def _pick(token_suffix: str, roster_id: int) -> Pick:
+    return Pick(
+        pick_token=f"pick_2027_r1_orig{token_suffix}",
+        display_name="2027 1st",
+        season=2027,
+        round=1,
+        original_owner_roster_id=roster_id,
+        original_owner_name="X",
+        current_owner_roster_id=roster_id,
+        origin="native",
+    )
+
+
 def test_values_by_sleeper_id_excludes_picks() -> None:
     values = load_fixture("fantasycalc/values_current.json")
     index = values_by_sleeper_id(values)
@@ -22,31 +35,25 @@ def test_values_by_sleeper_id_excludes_picks() -> None:
     assert "FP_2027_early_0" not in index
 
 
-def test_match_fantasycalc_pick_prefers_band_then_generic() -> None:
+def test_match_fantasycalc_pick_defaults_to_generic_not_roster_id() -> None:
     values = load_fixture("fantasycalc/values_current.json")
     pick_index = pick_records_by_name(values)
-    early_pick = Pick(
-        pick_token="pick_2027_r1_orig1",
-        display_name="2027 1st",
-        season=2027,
-        round=1,
-        original_owner_roster_id=1,
-        original_owner_name="A",
-        current_owner_roster_id=1,
-        origin="native",
-    )
-    late_pick = Pick(
-        pick_token="pick_2027_r1_orig14",
-        display_name="2027 1st",
-        season=2027,
-        round=1,
-        original_owner_roster_id=14,
-        original_owner_name="N",
-        current_owner_roster_id=14,
-        origin="native",
-    )
-    early = match_fantasycalc_pick(early_pick, pick_index)
-    late = match_fantasycalc_pick(late_pick, pick_index)
+    early_like = _pick("1", 1)
+    late_like = _pick("14", 14)
+    # Without projected_slot, roster_id must not drive band selection.
+    a = match_fantasycalc_pick(early_like, pick_index)
+    b = match_fantasycalc_pick(late_like, pick_index)
+    assert a is not None and b is not None
+    assert a.value == 3000
+    assert b.value == 3000
+
+
+def test_match_fantasycalc_pick_uses_projected_slot_band() -> None:
+    values = load_fixture("fantasycalc/values_current.json")
+    pick_index = pick_records_by_name(values)
+    pick = _pick("1", 99)
+    early = match_fantasycalc_pick(pick, pick_index, projected_slot=1)
+    late = match_fantasycalc_pick(pick, pick_index, projected_slot=14)
     assert early is not None and late is not None
     assert early.value == 4500
     assert late.value == 2200
@@ -56,19 +63,10 @@ def test_match_fantasycalc_pick_prefers_band_then_generic() -> None:
 def test_pick_value_source_uses_fantasycalc_then_falls_back() -> None:
     values = load_fixture("fantasycalc/values_current.json")
     pick_index = pick_records_by_name(values)
-    pick = Pick(
-        pick_token="pick_2027_r1_orig6",
-        display_name="2027 1st",
-        season=2027,
-        round=1,
-        original_owner_roster_id=6,
-        original_owner_name="F",
-        current_owner_roster_id=6,
-        origin="native",
-    )
+    pick = _pick("6", 6)
     src = pick_value_source(1, pick=pick, pick_index=pick_index)
     assert src.source == "fantasycalc"
-    assert src.value == 3200
+    assert src.value == 3000
 
     missing = pick_value_source(3, pick=None, pick_index={})
     assert missing.source == "config_pick_table"
@@ -78,18 +76,9 @@ def test_pick_value_source_uses_fantasycalc_then_falls_back() -> None:
 def test_pick_value_range_spans_early_to_late() -> None:
     values = load_fixture("fantasycalc/values_current.json")
     pick_index = pick_records_by_name(values)
-    pick = Pick(
-        pick_token="pick_2027_r1_orig6",
-        display_name="2027 1st",
-        season=2027,
-        round=1,
-        original_owner_roster_id=6,
-        original_owner_name="F",
-        current_owner_roster_id=6,
-        origin="native",
-    )
+    pick = _pick("6", 6)
     point, low, high = pick_value_range(pick, pick_index)
-    assert point == 3200
+    assert point == 3000
     assert low == 2200
     assert high == 4500
 

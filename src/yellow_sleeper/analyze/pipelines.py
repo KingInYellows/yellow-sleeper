@@ -461,11 +461,13 @@ def analyze_trade_pipeline(
             policy_flags=flags,
             source_notes=[
                 _source_note("asset_resolution", "sleeper"),
-                _source_note(
-                    "value_math",
-                    "fantasycalc",
-                    cache_status=values_cache_status,
-                    explanation=values_cache_error or tep_source_explanation(tep_tier),  # type: ignore[arg-type]
+                *_value_math_source_notes(
+                    values_cache_status=values_cache_status,
+                    values_cache_error=values_cache_error,
+                    tep_tier=tep_tier,
+                    overlay=overlay_map,
+                    overlay_precedence=overlay_precedence,
+                    overlay_disagreement_pct=overlay_disagreement_pct,
                 ),
             ],
             config_sources=config_sources or [],
@@ -504,11 +506,13 @@ def analyze_trade_pipeline(
         policy_flags=flags,
         source_notes=[
             _source_note("asset_resolution", "sleeper"),
-            _source_note(
-                "value_math",
-                "fantasycalc",
-                cache_status=values_cache_status,
-                explanation=values_cache_error or tep_source_explanation(tep_tier),  # type: ignore[arg-type]
+            *_value_math_source_notes(
+                values_cache_status=values_cache_status,
+                values_cache_error=values_cache_error,
+                tep_tier=tep_tier,
+                overlay=overlay_map,
+                overlay_precedence=overlay_precedence,
+                overlay_disagreement_pct=overlay_disagreement_pct,
             ),
             _source_note(
                 "roster_context.age_stats",
@@ -782,6 +786,40 @@ def _source_note(
         stale=stale,
         explanation=_truncate(note_explanation) if note_explanation else None,
     )
+
+
+def _value_math_source_notes(
+    *,
+    values_cache_status: str,
+    values_cache_error: str | None,
+    tep_tier: str,
+    overlay: Mapping[str, float],
+    overlay_precedence: str,
+    overlay_disagreement_pct: float,
+) -> list[SourceNote]:
+    """Provenance for trade value_math: FantasyCalc and/or CSV overlay."""
+    notes = [
+        _source_note(
+            "value_math.fantasycalc",
+            "fantasycalc",
+            cache_status=values_cache_status,
+            explanation=values_cache_error or tep_source_explanation(tep_tier),  # type: ignore[arg-type]
+        )
+    ]
+    if overlay:
+        notes.append(
+            _source_note(
+                "value_math.xlsx",
+                "xlsx",
+                cache_status=CACHE_STATUS_FRESH,
+                explanation=(
+                    f"CSV/sheet overlay active for {len(overlay)} sleeper_id(s); "
+                    f"precedence={overlay_precedence}; "
+                    f"disagreement_threshold_pct={overlay_disagreement_pct}."
+                ),
+            )
+        )
+    return notes
 
 
 def _player_record(player_id: str, players: Mapping[str, Any]) -> Mapping[str, Any] | None:
