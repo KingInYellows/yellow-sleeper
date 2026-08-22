@@ -87,13 +87,20 @@ class FantasyCalcClient:
         async def fetch() -> list[dict]:
             return [record.model_dump(mode="json") for record in await self.get_current_values()]
 
-        # Separate boards by TEP tier so switching tiers cannot serve the wrong TTL cache.
+        # Partition by effective query shape (includes tep) so custom params
+        # and tier switches cannot serve the wrong TTL board.
         return await cache.read_or_fetch(
             "fantasycalc_values",
             fetch,
             force=force,
-            variant=self.tep_tier,
+            variant=self._cache_variant(),
         )
+
+    def _cache_variant(self) -> str:
+        if not self.query_params:
+            return self.tep_tier
+        encoded = "_".join(f"{key}-{self.query_params[key]}" for key in sorted(self.query_params))
+        return f"{self.tep_tier}__{encoded}"
 
     async def probe(self) -> LiveProbeResult:
         start = time.monotonic()
