@@ -155,6 +155,10 @@ def test_smoke_7_pick_ladder_differentiates_early_vs_late(sleeper_snapshot: dict
         overlay_precedence="overlay_wins",
     )
     assert result.value_math is not None
+    send_asset = next(item for item in result.value_math.per_asset if item["side"] == "send")
+    # No FC 2027 3rd ladder row → static config_pick_table fallback.
+    assert send_asset["value"] == 600
+    assert send_asset["sources"][0].source == "config_pick_table"
     assert any(note.field == "value_math.fantasycalc" for note in result.source_notes)
     assert any(
         note.field == "value_math.xlsx" and note.source == "xlsx" for note in result.source_notes
@@ -178,6 +182,7 @@ def test_smoke_8_overlay_wins_and_source_disagreement(sleeper_snapshot: dict) ->
     )
     assert result.value == 5000
     assert result.source_disagreement is not None
+    assert any(note.source == "xlsx" and note.field == "value" for note in result.source_notes)
     assert any(flag.type.value == "source_disagreement" for flag in result.policy_flags)
 
 

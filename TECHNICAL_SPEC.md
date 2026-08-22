@@ -466,7 +466,7 @@ async def probe(self) -> LiveProbeResult:
     try:
         response = await self._http.get(
             f"{self.BASE_URL}/values/current",
-            params={**QUERY_PARAMS, "limit": "1"},  # smallest possible response if supported
+            params={**self.query_params, "limit": "1"},  # smallest possible response if supported
         )
         response.raise_for_status()
         # Validate at least the first record parses
@@ -1047,15 +1047,14 @@ Items previously listed as open in TOOL_CONTRACTS.md §7:
 
 ## 13. Items Deferred to Stage 2
 
-Stage 2 accuracy track (in progress / planned in `STAGE2_PLAN.md`):
+Stage 2 accuracy track (see `STAGE2_PLAN.md`):
 
-- Spreadsheet/CSV value overlay (`source=xlsx` contract name; CSV file format)
-- FantasyCalc pick ladder as primary pick values (static table remains fallback)
-- Conditional / pick-swap trade handling beyond UNRESOLVED (scenario ranges)
-
-Completed relative to older MVP deferrals:
+Completed:
 
 - TEP-aware FantasyCalc query via `tep=te+` (0.5 TEP mapping)
+- Spreadsheet/CSV value overlay (`source=xlsx` contract name; CSV file format)
+- FantasyCalc pick ladder as primary pick values (static table remains fallback)
+- Conditional / pick-swap trade handling with scenario `delta_min`/`delta_max` ranges
 
 Still deferred (not accuracy-critical):
 

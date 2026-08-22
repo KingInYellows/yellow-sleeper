@@ -318,8 +318,19 @@ def get_player_value_output(
         flags.extend(_value_cache_flags(values_cache_status, values_cache_error))
     cache_status = values_cache_status if fantasycalc_enabled else CACHE_STATUS_FRESH
     if fantasycalc_enabled:
-        source_note_explanation = values_cache_error or tep_source_explanation(tep_tier)  # type: ignore[arg-type]
-        primary_source = "fantasycalc"
+        overlay_selected = (
+            value is not None
+            and resolution.resolved_id is not None
+            and resolution.resolved_id in overlay_map
+            and float(value) == float(overlay_map[resolution.resolved_id])
+            and overlay_precedence == "overlay_wins"
+        )
+        if overlay_selected:
+            source_note_explanation = "Local CSV/sheet overlay (contract source name xlsx)."
+            primary_source = "xlsx"
+        else:
+            source_note_explanation = values_cache_error or tep_source_explanation(tep_tier)  # type: ignore[arg-type]
+            primary_source = "fantasycalc"
     else:
         source_note_explanation = (
             "Local CSV/sheet overlay (contract source name xlsx)."
@@ -454,10 +465,14 @@ def analyze_trade_pipeline(
         )
         flags.extend(_missing_value_flags(missing_assets))
         flags.extend(_value_cache_flags(values_cache_status, values_cache_error))
+        conditional_data_status = _trade_data_status(value_math, missing_assets)
+        if conditional_data_status == DataStatus.COMPLETE:
+            # Conditionals remain PARTIAL even when values resolve: triggers are unverified.
+            conditional_data_status = DataStatus.PARTIAL
         return AnalyzeTradeOutput(
             policy_status=PolicyStatus.OK,
             resolution_status=resolution_status,
-            data_status=DataStatus.PARTIAL,
+            data_status=conditional_data_status,
             policy_flags=flags,
             source_notes=[
                 _source_note("asset_resolution", "sleeper"),
@@ -536,7 +551,9 @@ def league_power_map_output(
     values_cache_status: str = "cached",
     values_cache_error: str | None = None,
 ) -> LeaguePowerMapOutput:
-    value_index = values_by_sleeper_id(values)
+    value_records = parse_value_records(values)
+    value_index = values_by_sleeper_id(value_records)
+    pick_index = pick_records_by_name(value_records) if include_pick_value else {}
     names = _user_by_owner(snapshot)
     teams: list[TeamRollup] = []
     missing_any = False
@@ -564,7 +581,7 @@ def league_power_map_output(
                 positional_rollups=rollups,  # type: ignore[arg-type]
                 roster_total=roster_total,
                 pick_total=(
-                    _pick_total(snapshot, int(roster["roster_id"]), values=values)
+                    _pick_total(snapshot, int(roster["roster_id"]), pick_index=pick_index)
                     if include_pick_value
                     else None
                 ),
@@ -1401,13 +1418,13 @@ def _pick_total(
     snapshot: dict[str, Any],
     roster_id: int,
     *,
-    values: Iterable[FCRecord | Mapping[str, Any]] | None = None,
+    pick_index: Mapping[str, FCRecord] | None = None,
 ) -> float:
     inventory = build_pick_inventory(snapshot, my_roster_id=roster_id)
-    pick_index = pick_records_by_name(values or [])
+    index = dict(pick_index or {})
     total = 0.0
     for pick in inventory.owned_picks:
-        src = pick_value_source(pick.round, pick=pick, pick_index=pick_index)
+        src = pick_value_source(pick.round, pick=pick, pick_index=index)
         if src.value is not None:
             total += float(src.value)
     return total

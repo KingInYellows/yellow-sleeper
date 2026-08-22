@@ -172,7 +172,12 @@ def pick_value_range(
     else:
         point = PICK_VALUE_BY_ROUND.get(pick.round)
     if band_values:
-        return point, min(band_values), max(band_values)
+        low = min(band_values)
+        high = max(band_values)
+        if point is not None:
+            low = min(low, point)
+            high = max(high, point)
+        return point, low, high
     return point, point, point
 
 
