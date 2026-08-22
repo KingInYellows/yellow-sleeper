@@ -8,7 +8,7 @@ import os
 import tempfile
 import time
 from collections import defaultdict
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -145,8 +145,15 @@ class Cache:
             return "cached"
         return "stale"
 
-    def statuses(self) -> dict[str, HealthCacheStatus]:
-        return {key: self.status(key) for key in CACHE_SPECS}
+    def statuses(
+        self,
+        variants: Mapping[str, str] | None = None,
+    ) -> dict[str, HealthCacheStatus]:
+        variant_map = dict(variants or {})
+        return {
+            key: self.status(key, variant=variant_map.get(key))
+            for key in CACHE_SPECS
+        }
 
     def _resolved_path(
         self, key: CacheKey, *, gzipped: bool, variant: str | None = None

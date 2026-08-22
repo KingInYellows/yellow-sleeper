@@ -82,3 +82,15 @@ async def test_read_or_fetch_variant_isolates_cache_files(tmp_path: Path) -> Non
     assert cached_te.status == "cached"
     assert cached_te.data == [{"value": 1, "tier": 1}]
     assert calls == ["te+", "off"]
+
+
+@pytest.mark.asyncio
+async def test_statuses_respects_variant_paths(tmp_path: Path) -> None:
+    cache = Cache(tmp_path)
+
+    async def fetch() -> list[dict[str, int]]:
+        return [{"value": 1}]
+
+    await cache.read_or_fetch("fantasycalc_values", fetch, variant="te+")
+    assert cache.statuses()["fantasycalc_values"] == "missing"
+    assert cache.statuses(variants={"fantasycalc_values": "te+"})["fantasycalc_values"] == "fresh"

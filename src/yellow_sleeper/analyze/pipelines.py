@@ -317,27 +317,14 @@ def get_player_value_output(
     if fantasycalc_enabled:
         flags.extend(_value_cache_flags(values_cache_status, values_cache_error))
     cache_status = values_cache_status if fantasycalc_enabled else CACHE_STATUS_FRESH
-    if fantasycalc_enabled:
-        overlay_selected = (
-            value is not None
-            and resolution.resolved_id is not None
-            and resolution.resolved_id in overlay_map
-            and float(value) == float(overlay_map[resolution.resolved_id])
-            and overlay_precedence == "overlay_wins"
-        )
-        if overlay_selected:
-            source_note_explanation = "Local CSV/sheet overlay (contract source name xlsx)."
-            primary_source = "xlsx"
-        else:
-            source_note_explanation = values_cache_error or tep_source_explanation(tep_tier)  # type: ignore[arg-type]
-            primary_source = "fantasycalc"
-    else:
-        source_note_explanation = (
-            "Local CSV/sheet overlay (contract source name xlsx)."
-            if overlay_map
-            else "XLSX/CSV overlay path is empty or missing."
-        )
-        primary_source = "xlsx"
+    primary_source, source_note_explanation = _player_value_provenance(
+        value,
+        sources,
+        fantasycalc_enabled=fantasycalc_enabled,
+        has_overlay=bool(overlay_map),
+        tep_tier=tep_tier,
+        values_cache_error=values_cache_error,
+    )
     data_status = _with_stale_data_status(
         _value_data_status(bool(resolution.resolved_id), value is not None),
         cache_status,
@@ -782,6 +769,59 @@ def _value_cache_flags(cache_status: str, error: str | None = None) -> list[Poli
 
 def _truncate(value: str, limit: int = 500) -> str:
     return value[:limit]
+
+
+def _player_value_provenance(
+    value: float | None,
+    sources: list[Any],
+    *,
+    fantasycalc_enabled: bool,
+    has_overlay: bool,
+    tep_tier: str,
+    values_cache_error: str | None,
+) -> tuple[str, str]:
+    """Pick the source note that matches the returned player value."""
+    xlsx_note = "Local CSV/sheet overlay (contract source name xlsx)."
+    if not fantasycalc_enabled:
+        return (
+            "xlsx",
+            xlsx_note if has_overlay else "XLSX/CSV overlay path is empty or missing.",
+        )
+
+    fc_value = next(
+        (
+            float(source.value)
+            for source in sources
+            if source.source == "fantasycalc" and source.value is not None
+        ),
+        None,
+    )
+    xlsx_value = next(
+        (
+            float(source.value)
+            for source in sources
+            if source.source == "xlsx" and source.value is not None
+        ),
+        None,
+    )
+    fc_note = values_cache_error or tep_source_explanation(tep_tier)  # type: ignore[arg-type]
+
+    if value is None:
+        return "fantasycalc", fc_note
+
+    point = float(value)
+    if xlsx_value is not None and point == xlsx_value and fc_value != point:
+        return "xlsx", xlsx_note
+    if fc_value is not None and point == fc_value:
+        return "fantasycalc", fc_note
+    if fc_value is not None and xlsx_value is not None:
+        return (
+            "fantasycalc",
+            "Blended FantasyCalc and local CSV/sheet overlay (xlsx).",
+        )
+    if xlsx_value is not None:
+        return "xlsx", xlsx_note
+    return "fantasycalc", fc_note
 
 
 def _source_note(

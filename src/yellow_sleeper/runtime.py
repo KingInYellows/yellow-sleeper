@@ -60,7 +60,7 @@ class Runtime:
         *,
         force: bool = False,
     ) -> tuple[dict[str, str], dict[str, str], list[str], dict[str, str]]:
-        prior = self.cache.statuses()
+        prior = self.cache_statuses()
         refreshed: list[str] = []
         failures: dict[str, str] = {}
 
@@ -82,8 +82,14 @@ class Runtime:
                     "refresh_all: %r failed: %s", key, exc, exc_info=True
                 )
                 failures[key] = format_cache_error(exc) or str(exc)[:500]
-        post = self.cache.statuses()
+        post = self.cache_statuses()
         return prior, post, refreshed, failures
+
+    def cache_statuses(self) -> dict[str, str]:
+        """Report freshness for each cache key, including FantasyCalc query variants."""
+        return self.cache.statuses(
+            variants={"fantasycalc_values": self.fantasycalc._cache_variant()}
+        )
 
 
 _runtime: Runtime | None = None

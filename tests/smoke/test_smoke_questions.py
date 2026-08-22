@@ -186,6 +186,22 @@ def test_smoke_8_overlay_wins_and_source_disagreement(sleeper_snapshot: dict) ->
     assert any(flag.type.value == "source_disagreement" for flag in result.policy_flags)
 
 
+def test_smoke_8b_overlay_fallback_when_fc_missing() -> None:
+    from yellow_sleeper.analyze.pipelines import get_player_value_output
+
+    result = get_player_value_output(
+        player="Jaylen Wright",
+        players=load_fixture("sleeper/players_nfl.json"),
+        values=[],  # no FantasyCalc board
+        valuation_source="auto",
+        overlay={"11620": 1234.0},
+        overlay_precedence="fc_wins",
+        tep_tier="te+",
+    )
+    assert result.value == 1234.0
+    assert any(note.source == "xlsx" and note.field == "value" for note in result.source_notes)
+
+
 def test_smoke_9_conditional_trade_flags_and_partial_range(sleeper_snapshot: dict) -> None:
     result = analyze_trade_pipeline(
         my_send=["Jaylen Wright if he plays 10 games"],
