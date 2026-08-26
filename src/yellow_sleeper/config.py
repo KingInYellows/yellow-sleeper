@@ -4,7 +4,7 @@ import logging
 import os
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from ruamel.yaml import YAML
@@ -14,12 +14,15 @@ from .models.trade import PolicyOverride
 
 logger = logging.getLogger("yellow_sleeper.config")
 
+TepTier = Literal["off", "te+", "te++"]
+
 
 class StaticConfig(BaseModel):
     sleeper_league_id: str = Field("0", max_length=20)
     sleeper_username: str = Field("brad", max_length=100)
     league_format: str = "14-team SF PPR 0.5 TEP"
     cache_dir: Path = Path(".cache")
+    tep_tier: TepTier = "te+"
 
 
 class DynamicPolicy(BaseModel):
@@ -146,6 +149,7 @@ def _load_static_config(
         "sleeper_username": "sleeper_username",
         "league_format": "league_format",
         "cache_dir": "cache_dir",
+        "tep_tier": "tep_tier",
     }
     for yaml_key, model_key in yaml_keys.items():
         if yaml_key in yaml_data:
@@ -158,6 +162,7 @@ def _load_static_config(
         "SLEEPER_USERNAME": "sleeper_username",
         "LEAGUE_FORMAT": "league_format",
         "CACHE_DIR": "cache_dir",
+        "YELLOW_SLEEPER_TEP_TIER": "tep_tier",
     }
     for env_key, model_key in env_keys.items():
         if model_key not in values and env_key in env:

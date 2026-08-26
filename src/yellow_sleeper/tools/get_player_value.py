@@ -31,5 +31,6 @@ async def dynasty_get_player_value(
         valuation_source=valuation_source,
         values_cache_status=values_cache_status,
         values_cache_error=values_cache_error,
+        tep_tier=runtime.config.static.tep_tier,
     )
     return output.model_dump(mode="json")

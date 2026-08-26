@@ -160,3 +160,37 @@ What's next:
 
 Blockers:
 - None.
+
+## 2026-08-20 — Stage 2 research and plan (value accuracy)
+
+Current milestone: Stage 2 planning (not yet implementing).
+
+What was just completed:
+- Ran multi-source research on FantasyCalc TEP, spreadsheet overlays, and pick valuation (`docs/research/accurate-stage-2-value-modeling.md`).
+- Confirmed live FantasyCalc `tep=te+` / `te++` (TECHNICAL_SPEC §4 “no tep param” is outdated).
+- Wrote `STAGE2_PLAN.md` with accuracy-first milestones S2-1 → S2-4.
+- Recorded decisions in `DECISIONS.md`.
+
+What's next:
+- Implement **S2-1**: FantasyCalc `tep=te+` + config + fixtures + TECHNICAL_SPEC §4 reconcile.
+- Then S2-2 pick ladder, S2-3 overlay, S2-4 conditionals.
+
+Blockers:
+- None for S2-1.
+
+## 2026-08-26 — S2-1: FantasyCalc `tep=te+`
+
+Current milestone: S2-1.
+
+What was just completed:
+- Config `tep_tier` (default `te+`); FantasyCalc client sends `tep=te+` and omits the key when `off`.
+- Query-shape cache isolation; health still reports `fantasycalc_values`.
+- Shared `resolve_player_value` stub wired through the five value-bearing tools.
+- Separate TE+ fixture (original non-TEP board unchanged); GitHub Actions ruff+pytest; `goal.md` historical-MVP banner.
+- Live probe note: `docs/research/fantasycalc-tep-probe-2026-08-26.md`.
+
+What's next:
+- S2-2 FantasyCalc pick ladder.
+
+Blockers:
+- None.
