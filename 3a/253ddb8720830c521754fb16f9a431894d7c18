@@ -1,0 +1,31 @@
+STATUS.md
+  s_f8273642309829::t_fc19728f331a6f 163-179
+  s_f8273642309829::t_74be388d69ebba 180-182
+.gitignore
+  s_f8273642309829::t_25642ac6efb0c7 3
+  s_f8273642309829::t_b4e5defc47934b 8
+STAGE2_PLAN.md
+  s_f8273642309829::t_777d407e479fa5 1-126
+  s_f8273642309829::t_88577e01f43c71 127
+DECISIONS.md
+  s_f8273642309829::t_325e60925a86a3 18-33
+  s_f8273642309829::t_86cf4d2bf9709a 34-36
+docs/research/accurate-stage-2-value-modeling.md
+  s_f8273642309829::t_639cad79f81777 1-222
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "3a253ddb8720830c521754fb16f9a431894d7c18",
+  "prompts": {},
+  "sessions": {
+    "s_f8273642309829": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ea9bbb1b-ad10-4feb-9122-061215a07910",
+        "model": "default"
+      },
+      "human_author": "KingInYellow18 <KingInYellow18@proton.me>"
+    }
+  }
+}
