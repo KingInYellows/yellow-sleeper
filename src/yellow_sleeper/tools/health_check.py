@@ -34,7 +34,7 @@ async def dynasty_health_check(force_probe: bool = False) -> dict:
             for i, result in enumerate(raw_results)
         ]
     output = health_check_output(
-        cache_status=runtime.cache.statuses(),
+        cache_status=runtime.cache_statuses(),
         league_id=runtime.config.static.sleeper_league_id,
         user=runtime.config.static.sleeper_username,
         config_sources=runtime.config.static_sources,

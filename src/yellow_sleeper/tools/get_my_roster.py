@@ -22,5 +22,6 @@ async def dynasty_get_my_roster() -> dict:
         config_sources=config_sources,
         values_cache_status=values_result.status,
         values_cache_error=format_cache_error(values_result.error),
+        tep_tier=runtime.config.static.tep_tier,
     )
     return output.model_dump(mode="json")

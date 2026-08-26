@@ -9,7 +9,7 @@ from typing import Any
 
 from rapidfuzz import fuzz
 
-from ..clients.fantasycalc import FCRecord
+from ..clients.fantasycalc import FCRecord, TepTier, tep_source_explanation
 from ..config import DynamicPolicy
 from ..models import (
     AgeStats,
@@ -41,6 +41,7 @@ from ..models import (
     ResolutionStatus,
     RosterContext,
     RosterPlayer,
+    SourceDisagreement,
     SourceNote,
     TeamRollup,
     ValueMath,
@@ -58,9 +59,7 @@ from .value import (
     PICK_VALUE_BY_ROUND,
     parse_value_records,
     pick_value_source,
-    player_value_source,
-    source_disagreement,
-    value_source,
+    resolve_player_value,
     values_by_sleeper_id,
 )
 
@@ -129,6 +128,7 @@ def get_my_roster_output(
     config_sources: list[str],
     values_cache_status: str = "cached",
     values_cache_error: str | None = None,
+    tep_tier: TepTier = "te+",
 ) -> GetMyRosterOutput:
     roster_id = find_roster_id_for_username(snapshot, sleeper_username)
     if roster_id is None:
@@ -157,7 +157,7 @@ def get_my_roster_output(
     roster = _roster_by_id(snapshot, roster_id)
     value_index = values_by_sleeper_id(values)
     roster_players = [
-        _roster_player(player_id, players, value_index)
+        _roster_player(player_id, players, value_index, tep_tier=tep_tier)
         for player_id in roster.get("players", [])
         if _player_record(player_id, players) is not None
     ]
@@ -186,7 +186,7 @@ def get_my_roster_output(
                 "grouped_roster[].value",
                 "fantasycalc",
                 cache_status=values_cache_status,
-                explanation=values_cache_error,
+                explanation=values_cache_error or tep_source_explanation(tep_tier),
             ),
         ],
         config_sources=config_sources,
@@ -273,6 +273,7 @@ def get_player_value_output(
     valuation_source: str = "auto",
     values_cache_status: str = "cached",
     values_cache_error: str | None = None,
+    tep_tier: TepTier = "te+",
 ) -> GetPlayerValueOutput:
     resolution = resolve_player(player, players)
     fantasycalc_enabled = valuation_source != "xlsx"
@@ -282,26 +283,31 @@ def get_player_value_output(
     value = None
     sources = []
     missing = []
+    disagreement = None
+    effective_source = "fantasycalc" if fantasycalc_enabled else "xlsx"
+    source_note_explanation = (
+        values_cache_error or tep_source_explanation(tep_tier)
+        if fantasycalc_enabled
+        else "CSV overlay is not configured (contract source name xlsx)."
+    )
     if resolution.resolved_id:
-        if fantasycalc_enabled:
-            source = player_value_source(resolution.resolved_id, value_index)
-            missing_source = "fantasycalc"
-        else:
-            source = value_source("xlsx", None, enabled=False)
-            missing_source = "xlsx"
-        sources = [source]
-        value = source.value
+        resolved = resolve_player_value(
+            resolution.resolved_id,
+            value_index,
+            valuation_source=valuation_source,
+            tep_tier=tep_tier,
+        )
+        sources = list(resolved.sources)
+        value = resolved.value
+        missing = list(resolved.missing)
+        disagreement = resolved.disagreement
+        effective_source = resolved.effective_source
+        source_note_explanation = values_cache_error or resolved.provenance_explanation
         if value is None:
-            missing.append(missing_source)
             flags.append(_missing_value_flag(player))
     if fantasycalc_enabled:
         flags.extend(_value_cache_flags(values_cache_status, values_cache_error))
     cache_status = values_cache_status if fantasycalc_enabled else CACHE_STATUS_FRESH
-    source_note_explanation = (
-        values_cache_error
-        if fantasycalc_enabled
-        else "XLSX valuation source is not implemented in MVP."
-    )
     data_status = _with_stale_data_status(
         _value_data_status(bool(resolution.resolved_id), value is not None),
         cache_status,
@@ -314,7 +320,7 @@ def get_player_value_output(
         source_notes=[
             _source_note(
                 "value",
-                "fantasycalc" if fantasycalc_enabled else "xlsx",
+                effective_source,
                 cache_status=cache_status,
                 explanation=source_note_explanation,
             )
@@ -323,6 +329,7 @@ def get_player_value_output(
         name=_resolved_player_name(resolution.resolved_id, players),
         value=value,
         value_sources=sources,
+        source_disagreement=disagreement,
         missing_values=missing,
         candidates=candidates,
     )
@@ -340,6 +347,7 @@ def analyze_trade_pipeline(
     config_sources: list[str] | None = None,
     values_cache_status: str = "cached",
     values_cache_error: str | None = None,
+    tep_tier: TepTier = "te+",
 ) -> AnalyzeTradeOutput:
     value_records = parse_value_records(values)
     value_index = values_by_sleeper_id(value_records)
@@ -395,6 +403,7 @@ def analyze_trade_pipeline(
         receive_resolutions,
         inventory,
         value_index,
+        tep_tier=tep_tier,
     )
     flags.extend(_missing_value_flags(missing_assets))
     flags.extend(_value_cache_flags(values_cache_status, values_cache_error))
@@ -419,7 +428,7 @@ def analyze_trade_pipeline(
                 "value_math",
                 "fantasycalc",
                 cache_status=values_cache_status,
-                explanation=values_cache_error,
+                explanation=values_cache_error or tep_source_explanation(tep_tier),
             ),
             _source_note(
                 "roster_context.age_stats",
@@ -442,6 +451,7 @@ def league_power_map_output(
     include_pick_value: bool = False,
     values_cache_status: str = "cached",
     values_cache_error: str | None = None,
+    tep_tier: TepTier = "te+",
 ) -> LeaguePowerMapOutput:
     value_index = values_by_sleeper_id(values)
     names = _user_by_owner(snapshot)
@@ -449,7 +459,7 @@ def league_power_map_output(
     missing_any = False
     for roster in snapshot["rosters"]:
         roster_players = [
-            _roster_player(player_id, players, value_index)
+            _roster_player(player_id, players, value_index, tep_tier=tep_tier)
             for player_id in roster.get("players", [])
             if _player_record(player_id, players) is not None
         ]
@@ -492,7 +502,7 @@ def league_power_map_output(
                 "teams[].roster_total",
                 "fantasycalc",
                 cache_status=values_cache_status,
-                explanation=values_cache_error,
+                explanation=values_cache_error or tep_source_explanation(tep_tier),
             ),
         ],
         teams=teams,
@@ -557,9 +567,17 @@ def best_player_available_output(
     board_source: str = "fantasycalc",
     values_cache_status: str = "cached",
     values_cache_error: str | None = None,
+    tep_tier: TepTier = "te+",
 ) -> BestPlayerAvailableOutput:
     drafted = {str(pick.get("player_id")) for pick in draft_state.get("picks", [])}
-    value_index = values_by_sleeper_id(values)
+    value_index = values_by_sleeper_id(values) if board_source != "xlsx" else {}
+    bpa_valuation = (
+        "xlsx"
+        if board_source == "xlsx"
+        else "fantasycalc"
+        if board_source == "fantasycalc"
+        else "auto"
+    )
     candidates = []
     excluded = 0
     for player_id, raw in players.items():
@@ -576,13 +594,18 @@ def best_player_available_output(
         ):
             excluded += 1
             continue
-        value = value_index.get(str(player_id))
+        resolved = resolve_player_value(
+            str(player_id),
+            value_index,
+            valuation_source=bpa_valuation,
+            tep_tier=tep_tier,
+        )
         candidates.append(
             BPACandidate(
                 sleeper_id=str(player_id),
                 name=str(raw.get("full_name") or raw.get("search_full_name")),
                 position=player_position,  # type: ignore[arg-type]
-                value=value.value if value else None,
+                value=resolved.value,
                 rookie_status=rookie,
                 prior_drafted=prior_drafted,
                 inclusion_reasons=_bpa_reasons(
@@ -594,17 +617,22 @@ def best_player_available_output(
             )
         )
     candidates.sort(key=lambda candidate: candidate.value or 0, reverse=True)
+    bpa_cache_status = values_cache_status if board_source != "xlsx" else CACHE_STATUS_FRESH
     return BestPlayerAvailableOutput(
         policy_status=PolicyStatus.OK,
         resolution_status=ResolutionStatus.OK,
-        data_status=_with_stale_data_status(DataStatus.COMPLETE, values_cache_status),
-        policy_flags=_value_cache_flags(values_cache_status, values_cache_error),
+        data_status=_with_stale_data_status(DataStatus.COMPLETE, bpa_cache_status),
+        policy_flags=_value_cache_flags(bpa_cache_status, values_cache_error),
         source_notes=[
             _source_note(
                 "candidates",
-                "fantasycalc",
-                cache_status=values_cache_status,
-                explanation=values_cache_error,
+                "xlsx" if board_source == "xlsx" else "fantasycalc",
+                cache_status=values_cache_status if board_source != "xlsx" else CACHE_STATUS_FRESH,
+                explanation=(
+                    "CSV overlay is not configured (contract source name xlsx)."
+                    if board_source == "xlsx"
+                    else values_cache_error or tep_source_explanation(tep_tier)
+                ),
             )
         ],
         candidates=candidates[:limit],
@@ -709,18 +737,20 @@ def _roster_player(
     player_id: str,
     players: Mapping[str, Any],
     value_index: dict[str, FCRecord],
+    *,
+    tep_tier: TepTier = "te+",
 ) -> RosterPlayer:
     raw = _player_record(player_id, players) or {}
-    source = player_value_source(str(player_id), value_index)
+    resolved = resolve_player_value(str(player_id), value_index, tep_tier=tep_tier)
     return RosterPlayer(
         sleeper_id=str(player_id),
         name=str(raw.get("full_name") or raw.get("search_full_name") or player_id),
         position=raw.get("position"),  # type: ignore[arg-type]
         team=raw.get("team"),
         age=raw.get("age"),
-        value=source.value,
+        value=resolved.value,
         rookie_status=int(raw.get("years_exp") or 0) == 0,
-        value_sources=[source],
+        value_sources=list(resolved.sources),
     )
 
 
@@ -909,6 +939,8 @@ def _trade_value_math(
     receive: list[AssetResolution],
     inventory: PickInventory,
     value_index: dict[str, FCRecord],
+    *,
+    tep_tier: TepTier = "te+",
 ) -> tuple[ValueMath, list[str]]:
     per_asset = []
     send_total = 0.0
@@ -917,14 +949,15 @@ def _trade_value_math(
     disagreements = []
     for side, resolutions in [("send", send), ("receive", receive)]:
         for resolution in resolutions:
-            value_source = _asset_value_source(resolution, inventory, value_index)
-            value = value_source.value
+            value, sources, disagreement = _asset_value_source(
+                resolution, inventory, value_index, tep_tier=tep_tier
+            )
             per_asset.append(
                 {
                     "asset": resolution.resolved_id,
                     "side": side,
                     "value": value,
-                    "sources": [value_source],
+                    "sources": sources,
                 }
             )
             if value is None:
@@ -934,7 +967,6 @@ def _trade_value_math(
                 send_total += value
             else:
                 receive_total += value
-            disagreement = source_disagreement([value_source])
             if disagreement is not None:
                 disagreements.append(disagreement)
     delta = receive_total - send_total
@@ -955,14 +987,22 @@ def _asset_value_source(
     resolution: AssetResolution,
     inventory: PickInventory,
     value_index: dict[str, FCRecord],
-):
+    *,
+    tep_tier: TepTier = "te+",
+) -> tuple[float | None, list, SourceDisagreement | None]:
     if resolution.asset_type == "player" and resolution.resolved_id:
-        return player_value_source(resolution.resolved_id, value_index)
+        resolved = resolve_player_value(
+            resolution.resolved_id,
+            value_index,
+            tep_tier=tep_tier,
+        )
+        return resolved.value, list(resolved.sources), resolved.disagreement
     pick = next(
         (pick for pick in inventory.league_picks if pick.pick_token == resolution.resolved_id),
         None,
     )
-    return pick_value_source(pick.round if pick else 0)
+    pick_source = pick_value_source(pick.round if pick else 0)
+    return pick_source.value, [pick_source], None
 
 
 def _trade_data_status(value_math: ValueMath, missing_assets: list[str]) -> DataStatus:

@@ -1,3 +1,5 @@
+> **Historical MVP prompt.** This file is the completed Milestone 0–4 execution prompt. Do not treat the Stage 2 prohibition below as current work. **Stage 2 value accuracy is governed by `STAGE2_PLAN.md`** (and the four-PR Graphite stack from `main`). Packaging, HTTP, Docker, OAuth, multi-user, and notifications remain out of Stage 2 scope.
+
 /goal Build the Yellow Sleeper MCP server MVP to the spec frozen in PRD.md, TOOL_CONTRACTS.md, and TECHNICAL_SPEC.md at the repository root. Do not stop until every smoke-test scenario in PRD §"Success Metrics" passes on a real Sleeper+FantasyCalc fixture set and `uv tool install .` succeeds locally.
 
 ## Source of truth — read these first, every loop

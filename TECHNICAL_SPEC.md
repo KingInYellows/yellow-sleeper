@@ -381,7 +381,7 @@ async def probe(self) -> LiveProbeResult:
 **The reality of this dependency:** the FantasyCalc API is undocumented but stable enough to power the official Python tutorial published by fantasydatapros.com. The request shape is confirmed:
 
 ```
-GET https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=2&numTeams=14&ppr=1
+GET https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=2&numTeams=14&ppr=1&tep=te+
 ```
 
 Response shape (per the official tutorial example):
@@ -392,7 +392,7 @@ Two things to call out from that shape:
 
 1. **`sleeperId` is a top-level field** on every player record. This is the join key — no fuzzy matching is needed between FantasyCalc and Sleeper data. Important: it can be `None` for a small number of players (deep rookies, retired, recently signed) and the code path must handle that as `missing_value` rather than throwing.
 
-2. **No `tep` parameter exists** in the documented query string. The Yellow Sleeper league is 0.5 TEP. This confirms the PRD's call to treat MVP values as "non-TEP approximations" and plan a Stage 2 spreadsheet overlay. There is no engineering workaround in MVP — document it in the source notes so the LLM knows.
+2. **`tep` is a discrete FantasyCalc query parameter** with values omitted (no TEP), `te+`, or `te++`. Numeric `tep=0.5` is **not** accepted (HTTP 404). The Yellow Sleeper league is 0.5 TEP; Stage 2 maps that to **`tep=te+`** (aligned with KeepTradeCut’s TE+ guidance for +.5 PPR). Dynasty responses also include `position=PICK` rows (early/mid/late and slot-specific) used in later Stage 2 milestones as the primary pick-value source, with the static round table as fallback.
 
 ### Query parameters for the Yellow Sleeper league
 
@@ -403,10 +403,11 @@ QUERY_PARAMS = {
     "numQbs": "2",      # Superflex
     "numTeams": "14",
     "ppr": "1",         # PPR
+    "tep": "te+",       # 0.5 TEP → discrete TE+ tier
 }
 ```
 
-These are constants derived from `LEAGUE_FORMAT` and pinned. Not configurable per-call; the league format does not change mid-season.
+These are derived from `LEAGUE_FORMAT` / `tep_tier` config (`off` | `te+` | `te++`). Default is `te+`. When `tep_tier=off`, the `tep` key is omitted entirely (do not send empty `tep=`). FantasyCalc cache files are isolated by query shape while the contract cache key remains `fantasycalc_values`.
 
 ### Schema-drift detection
 
@@ -433,7 +434,7 @@ class FantasyCalcClient:
     async def get_current_values(self) -> list[FCRecord]:
         response = await self._http.get(
             f"{self.BASE_URL}/values/current",
-            params=QUERY_PARAMS,
+            params=self.query_params,  # includes tep=te+ by default
         )
         response.raise_for_status()
         raw = response.json()
@@ -465,7 +466,7 @@ async def probe(self) -> LiveProbeResult:
     try:
         response = await self._http.get(
             f"{self.BASE_URL}/values/current",
-            params={**QUERY_PARAMS, "limit": "1"},  # smallest possible response if supported
+            params={**self.query_params, "limit": "1"},  # smallest possible response if supported
         )
         response.raise_for_status()
         # Validate at least the first record parses
@@ -1046,11 +1047,20 @@ Items previously listed as open in TOOL_CONTRACTS.md §7:
 
 ## 13. Items Deferred to Stage 2
 
-Explicitly *not* part of this spec; named here so they don't get smuggled into MVP:
+Stage 2 accuracy track (see `STAGE2_PLAN.md`). Schema stays `1.0`; no public `ValueMath` range fields.
 
-- Spreadsheet (xlsx) value overlay
-- TEP-aware value adjustment
-- Conditional / pick-swap trade handling beyond UNRESOLVED
+Completed:
+
+- TEP-aware FantasyCalc query via `tep=te+` (0.5 TEP mapping)
+
+Still in this Stage 2 track (later PRs):
+
+- FantasyCalc pick ladder as primary pick values (static table remains fallback)
+- Spreadsheet/CSV value overlay (`source=xlsx` contract name; CSV file format)
+- Conditional / pick-swap trade handling with scenario ranges in `per_asset` (no public `delta_min`/`delta_max`)
+
+Still deferred (not accuracy-critical):
+
 - Multi-user support
 - Public HTTP transport
 - Docker packaging

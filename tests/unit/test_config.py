@@ -4,7 +4,9 @@ import os
 import time
 from pathlib import Path
 
-from yellow_sleeper.config import DynamicPolicy, load_config
+from pydantic import ValidationError
+
+from yellow_sleeper.config import DynamicPolicy, StaticConfig, load_config
 from yellow_sleeper.models import PolicyOverride
 
 
@@ -67,3 +69,17 @@ def test_config_reload_failure_preserves_previous_policy(tmp_path: Path) -> None
 
     assert policy.hard_untouchables == ["Drake London"]
     assert sources[0] == ".yellow-sleeper.yaml (reload failed, using previous)"
+
+
+def test_config_tep_tier_from_env_and_rejects_invalid(tmp_path: Path) -> None:
+    config = load_config(
+        env={"YELLOW_SLEEPER_TEP_TIER": "te++"},
+        config_path=tmp_path / "missing.yaml",
+    )
+    assert config.static.tep_tier == "te++"
+
+    try:
+        StaticConfig.model_validate({"tep_tier": "0.5"})
+    except ValidationError:
+        return
+    raise AssertionError("StaticConfig accepted invalid tep_tier")

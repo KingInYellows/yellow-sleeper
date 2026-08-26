@@ -49,3 +49,47 @@ async def test_read_or_fetch_falls_back_to_stale_cache(tmp_path: Path) -> None:
     assert result.status == "stale"
     assert result.data == [{"value": 8200}]
     assert isinstance(result.error, RuntimeError)
+
+
+@pytest.mark.asyncio
+async def test_read_or_fetch_variant_isolates_cache_files(tmp_path: Path) -> None:
+    cache = Cache(tmp_path)
+    calls: list[str] = []
+
+    async def fetch_te_plus() -> list[dict[str, int]]:
+        calls.append("te+")
+        return [{"value": 1, "tier": 1}]
+
+    async def fetch_off() -> list[dict[str, int]]:
+        calls.append("off")
+        return [{"value": 2, "tier": 0}]
+
+    te_plus = await cache.read_or_fetch("fantasycalc_values", fetch_te_plus, variant="te+")
+    off = await cache.read_or_fetch("fantasycalc_values", fetch_off, variant="off")
+
+    assert te_plus.status == "fresh"
+    assert off.status == "fresh"
+    assert te_plus.data != off.data
+    assert (tmp_path / "fantasycalc_values__te+.json").exists()
+    assert (tmp_path / "fantasycalc_values__off.json").exists()
+
+    cached_te = await cache.read_or_fetch(
+        "fantasycalc_values",
+        fetch_off,
+        variant="te+",
+    )
+    assert cached_te.status == "cached"
+    assert cached_te.data == [{"value": 1, "tier": 1}]
+    assert calls == ["te+", "off"]
+
+
+@pytest.mark.asyncio
+async def test_statuses_respects_variant_paths(tmp_path: Path) -> None:
+    cache = Cache(tmp_path)
+
+    async def fetch() -> list[dict[str, int]]:
+        return [{"value": 1}]
+
+    await cache.read_or_fetch("fantasycalc_values", fetch, variant="te+")
+    assert cache.statuses()["fantasycalc_values"] == "missing"
+    assert cache.statuses(variants={"fantasycalc_values": "te+"})["fantasycalc_values"] == "fresh"

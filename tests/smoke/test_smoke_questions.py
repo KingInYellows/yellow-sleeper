@@ -117,3 +117,38 @@ def test_smoke_6_best_player_available_excludes_drafted_rookies() -> None:
         "not_already_drafted:true" in candidate.inclusion_reasons
         for candidate in result.candidates
     )
+
+
+def test_smoke_7_tep_te_ranks_higher_than_base_board() -> None:
+    from yellow_sleeper.analyze.pipelines import get_player_value_output
+
+    players = load_fixture("sleeper/players_nfl.json")
+    base = get_player_value_output(
+        player="Harold Fannin",
+        players=players,
+        values=load_fixture("fantasycalc/values_current.json"),
+        tep_tier="off",
+    )
+    tep = get_player_value_output(
+        player="Harold Fannin",
+        players=players,
+        values=load_fixture("fantasycalc/values_tep_teplus.json"),
+        tep_tier="te+",
+    )
+    london_base = get_player_value_output(
+        player="Drake London",
+        players=players,
+        values=load_fixture("fantasycalc/values_current.json"),
+        tep_tier="off",
+    )
+    london_tep = get_player_value_output(
+        player="Drake London",
+        players=players,
+        values=load_fixture("fantasycalc/values_tep_teplus.json"),
+        tep_tier="te+",
+    )
+
+    assert base.value is not None and tep.value is not None
+    assert tep.value > base.value
+    assert london_base.value == london_tep.value
+    assert "te+" in tep.source_notes[0].explanation

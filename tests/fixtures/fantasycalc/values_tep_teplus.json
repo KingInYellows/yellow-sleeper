@@ -1,0 +1,11 @@
+[
+  {"player": {"id": 9745, "name": "Drake London", "sleeperId": "9745", "position": "WR", "maybeAge": 24.6, "maybeTeam": "ATL"}, "value": 8200, "overallRank": 12, "positionRank": 5, "redraftValue": 7800, "trend30Day": 120},
+  {"player": {"id": 9491, "name": "Bijan Robinson", "sleeperId": "9491", "position": "RB", "maybeAge": 24.2, "maybeTeam": "ATL"}, "value": 9000, "overallRank": 6, "positionRank": 2, "redraftValue": 9100, "trend30Day": 40},
+  {"player": {"id": 11620, "name": "Jaylen Wright", "sleeperId": "11620", "position": "RB", "maybeAge": 23.1, "maybeTeam": "MIA"}, "value": 4500, "overallRank": 80, "positionRank": 26, "redraftValue": 3000, "trend30Day": 80},
+  {"player": {"id": 6786, "name": "Jayden Daniels", "sleeperId": "6786", "position": "QB", "maybeAge": 25.0, "maybeTeam": "WAS"}, "value": 10000, "overallRank": 2, "positionRank": 1, "redraftValue": 9900, "trend30Day": 60},
+  {"player": {"id": 12345, "name": "Jaxon Smith-Njigba", "sleeperId": "12345", "position": "WR", "maybeAge": 24.4, "maybeTeam": "SEA"}, "value": 7700, "overallRank": 18, "positionRank": 8, "redraftValue": 7300, "trend30Day": 90},
+  {"player": {"id": 9991, "name": "Harold Fannin", "sleeperId": "9991", "position": "TE", "maybeAge": 21.7, "maybeTeam": "CLE"}, "value": 4140, "overallRank": 95, "positionRank": 8, "redraftValue": 1000, "trend30Day": 20},
+  {"player": {"id": 11500, "name": "Ashton Jeanty", "sleeperId": "11500", "position": "RB", "maybeAge": 22.0, "maybeTeam": "LV"}, "value": 6800, "overallRank": 32, "positionRank": 10, "redraftValue": 6000, "trend30Day": 200},
+  {"player": {"id": 11501, "name": "Tetairoa McMillan", "sleeperId": "11501", "position": "WR", "maybeAge": 22.1, "maybeTeam": "CAR"}, "value": 6200, "overallRank": 40, "positionRank": 16, "redraftValue": 5400, "trend30Day": 160},
+  {"player": {"id": 11502, "name": "Cam Ward", "sleeperId": "11502", "position": "QB", "maybeAge": 23.0, "maybeTeam": "TEN"}, "value": 5100, "overallRank": 62, "positionRank": 18, "redraftValue": 3500, "trend30Day": 110}
+]

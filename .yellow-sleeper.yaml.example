@@ -1,4 +1,7 @@
 # Yellow Sleeper trade policy
+# Stage 2 static settings (optional):
+# tep_tier: te+          # off | te+ | te++  (0.5 TEP → te+)
+
 hard_untouchables:
   - Drake London
   - Harold Fannin
