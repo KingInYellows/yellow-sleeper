@@ -12,6 +12,7 @@ from rapidfuzz import fuzz
 from ..clients.fantasycalc import FCRecord
 from ..config import DynamicPolicy
 from ..models import (
+    TRADED_PICKS_CAP,
     AgeStats,
     AnalyzeTradeOutput,
     AssetResolution,
@@ -51,6 +52,7 @@ from ..resolve.picks import parse_pick_description
 from .roster import (
     PickInventory,
     build_pick_inventory,
+    build_roster_lineup,
     current_season,
     find_roster_id_for_username,
 )
@@ -156,11 +158,15 @@ def get_my_roster_output(
         )
     roster = _roster_by_id(snapshot, roster_id)
     value_index = values_by_sleeper_id(values)
+    player_ids = roster.get("players") or []
     roster_players = [
         _roster_player(player_id, players, value_index)
-        for player_id in roster.get("players", [])
-        if _player_record(player_id, players) is not None
+        for player_id in player_ids
+        if _player_record(str(player_id), players) is not None
     ]
+    league = snapshot.get("league") or {}
+    roster_positions = [str(pos) for pos in (league.get("roster_positions") or []) if pos]
+    lineup = build_roster_lineup(roster, roster_positions, players)
     missing_values = [player.sleeper_id for player in roster_players if player.value is None]
     grouped = [
         GroupedRoster(
@@ -194,6 +200,12 @@ def get_my_roster_output(
         positional_depth=_positional_depth(roster_players),
         age_stats=_age_stats(roster_players, roster_players),
         missing_values=missing_values,
+        starters=lineup.starters,
+        reserve=lineup.reserve,
+        taxi=lineup.taxi,
+        player_count=lineup.player_count,
+        roster_spots=lineup.roster_spots,
+        over_capacity=lineup.over_capacity,
     )
 
 
@@ -231,12 +243,28 @@ def list_traded_picks_output(
     seasons: list[int] | None = None,
 ) -> ListTradedPicksOutput:
     inventory = build_pick_inventory(snapshot, my_roster_id=my_roster_id, seasons=seasons)
+    all_picks = inventory.traded_picks
+    truncated = len(all_picks) > TRADED_PICKS_CAP
+    source_notes = [_source_note("picks", "sleeper")]
+    if truncated:
+        source_notes.append(
+            _source_note(
+                "picks",
+                "sleeper",
+                explanation=(
+                    f"Returned {TRADED_PICKS_CAP} of {len(all_picks)} traded picks; "
+                    "remainder omitted by output cap."
+                ),
+            )
+        )
     return ListTradedPicksOutput(
         policy_status=PolicyStatus.OK,
         resolution_status=ResolutionStatus.OK,
-        data_status=DataStatus.COMPLETE,
-        source_notes=[_source_note("picks", "sleeper")],
-        picks=inventory.traded_picks[:25],
+        data_status=DataStatus.PARTIAL if truncated else DataStatus.COMPLETE,
+        source_notes=source_notes,
+        picks=all_picks[:TRADED_PICKS_CAP],
+        truncated=truncated,
+        total_count=len(all_picks),
     )
 
 
@@ -343,7 +371,30 @@ def analyze_trade_pipeline(
 ) -> AnalyzeTradeOutput:
     value_records = parse_value_records(values)
     value_index = values_by_sleeper_id(value_records)
-    my_roster_id = find_roster_id_for_username(snapshot, sleeper_username) or 0
+    my_roster_id = find_roster_id_for_username(snapshot, sleeper_username)
+    if my_roster_id is None:
+        return AnalyzeTradeOutput(
+            policy_status=PolicyStatus.OK,
+            resolution_status=ResolutionStatus.NEEDS_CLARIFICATION,
+            data_status=DataStatus.UNAVAILABLE,
+            policy_flags=[
+                PolicyFlag(
+                    type=FlagType.AMBIGUOUS_RESOLUTION,
+                    asset=sleeper_username,
+                    rule_source="computed",
+                    severity=FlagSeverity.WARNING,
+                    reason=(
+                        f"Username '{sleeper_username}' did not resolve to a roster "
+                        "in the league snapshot."
+                    ),
+                )
+            ],
+            source_notes=[_source_note("asset_resolution", "sleeper")],
+            config_sources=config_sources or [],
+            asset_resolution=[],
+            value_math=None,
+            roster_context=None,
+        )
     inventory = build_pick_inventory(
         snapshot,
         my_roster_id=my_roster_id,

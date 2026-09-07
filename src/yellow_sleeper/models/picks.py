@@ -6,6 +6,10 @@ from pydantic import BaseModel, Field
 
 from .envelope import ResponseEnvelope
 
+# Default array cap of 25 silently drops a 14-team traded-pick market (live ~68).
+# 200 covers 14 teams × 5 rounds × multiple seasons with room for repeats.
+TRADED_PICKS_CAP = 200
+
 
 class ListTradedPicksInput(BaseModel):
     seasons: list[int] | None = Field(None, max_length=3)
@@ -24,7 +28,9 @@ class TradedPick(BaseModel):
 
 
 class ListTradedPicksOutput(ResponseEnvelope):
-    picks: list[TradedPick] = Field(..., max_length=25)
+    picks: list[TradedPick] = Field(..., max_length=TRADED_PICKS_CAP)
+    truncated: bool = False
+    total_count: int = Field(0, ge=0)
 
 
 class ListMyPicksInput(BaseModel):

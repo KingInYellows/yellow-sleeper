@@ -56,7 +56,7 @@ Every response surfaces:
 
 ## Pick Inventory Algorithm (native grid plus traded overlay)
 
-1. Supported seasons: current draft + two forward.
+1. Supported seasons: current draft + two forward. After the current season's rookie draft is complete, spent picks are no longer capital — the native-grid window starts at season+1. Traded-pick market listings still default to [current, current+1, current+2].
 2. Native grid: Cartesian product of (season × round × roster).
 3. Native pick: original/current owner = roster.
 4. Fetch Sleeper traded_picks. For each, overlay on matching native grid slot by season, round, original_owner_roster_id, set new current owner from owner_id.

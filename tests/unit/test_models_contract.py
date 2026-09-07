@@ -19,6 +19,7 @@ def test_contract_models_are_exported() -> None:
         "HealthCheckInput",
         "HealthCheckOutput",
         "GetMyRosterOutput",
+        "LineupSlot",
         "FindRosterOutput",
         "ListTradedPicksOutput",
         "ListMyPicksOutput",

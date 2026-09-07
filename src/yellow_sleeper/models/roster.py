@@ -31,11 +31,25 @@ class GroupedRoster(BaseModel):
     players: list[RosterPlayer] = Field(..., max_length=25)
 
 
+class LineupSlot(BaseModel):
+    index: int = Field(..., ge=0)
+    slot_position: str = Field(..., max_length=20)
+    sleeper_id: str | None = Field(None, max_length=20)
+    name: str | None = Field(None, max_length=100)
+    empty: bool = False
+
+
 class GetMyRosterOutput(ResponseEnvelope):
     grouped_roster: list[GroupedRoster]
     positional_depth: list[PositionalDepth]
     age_stats: AgeStats
     missing_values: list[str] = Field(default_factory=list, max_length=25)
+    starters: list[LineupSlot] = Field(default_factory=list, max_length=25)
+    reserve: list[LineupSlot] = Field(default_factory=list, max_length=25)
+    taxi: list[LineupSlot] = Field(default_factory=list, max_length=25)
+    player_count: int = Field(0, ge=0)
+    roster_spots: int = Field(0, ge=0)
+    over_capacity: bool = False
 
 
 class FindRosterInput(BaseModel):

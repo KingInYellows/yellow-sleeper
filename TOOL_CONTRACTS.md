@@ -338,11 +338,24 @@ class GroupedRoster(BaseModel):
     position: Literal\["QB", "RB", "WR", "TE"\]
     players: List\[RosterPlayer\] = Field(..., max_length=25)
 
+class LineupSlot(BaseModel):
+    index: int
+    slot_position: str
+    sleeper_id: Optional\[str\] = None
+    name: Optional\[str\] = None
+    empty: bool = False
+
 class GetMyRosterOutput(ResponseEnvelope):
     grouped_roster: List\[GroupedRoster\]
     positional_depth: List\[PositionalDepth\]
     age_stats: AgeStats
     missing_values: List\[str\] = Field(default_factory=list, max_length=25, description="sleeper_ids with no value from any enabled source.")
+    starters: List\[LineupSlot\] = Field(default_factory=list, max_length=25)
+    reserve: List\[LineupSlot\] = Field(default_factory=list, max_length=25)
+    taxi: List\[LineupSlot\] = Field(default_factory=list, max_length=25)
+    player_count: int = 0
+    roster_spots: int = 0
+    over_capacity: bool = False
 
 ```
 
@@ -443,7 +456,9 @@ class TradedPick(BaseModel):
     current_owner_name: str = Field(..., max_length=100)
 
 class ListTradedPicksOutput(ResponseEnvelope):
-    picks: List\[TradedPick\] = Field(..., max_length=25)
+    picks: List\[TradedPick\] = Field(..., max_length=200)
+    truncated: bool = Field(False, description="True when more traded picks exist than picks\[\]. Never silently drop rows.")
+    total_count: int = Field(0, description="Full matching traded-pick count before the output cap.")
 
 ```
 
