@@ -20,7 +20,7 @@ async def dynasty_list_my_picks(
     seasons: list[int] | None = None,
     include_traded_away: bool = False,
 ) -> dict:
-    """Return Brad's native, traded-in, and optionally traded-away picks."""
+    """Return the configured user's native, traded-in, and optionally traded-away picks."""
     runtime = await get_runtime()
     snapshot, _ = await runtime.snapshot()
     username = runtime.config.static.sleeper_username
@@ -37,8 +37,8 @@ async def dynasty_list_my_picks(
                     rule_source="computed",
                     severity=FlagSeverity.WARNING,
                     reason=(
-                        f"Configured sleeper_username '{username}' could not be mapped to a "
-                        "roster. Verify the username in .yellow-sleeper.yaml."
+                        "Configured sleeper_username did not map to a roster. "
+                        "Verify the username in .yellow-sleeper.yaml."
                     ),
                 )
             ],

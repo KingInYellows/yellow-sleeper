@@ -4,7 +4,7 @@ from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
-from ..clients.fantasycalc import FCRecord
+from ..clients.fantasycalc import PICK_TABLE_EXPLANATION, FCRecord, TepTier, tep_source_explanation
 from ..models import SourceDisagreement, ValueSourceBreakdown
 
 PICK_VALUE_BY_ROUND = {
@@ -14,6 +14,8 @@ PICK_VALUE_BY_ROUND = {
     4: 300.0,
     5: 100.0,
 }
+
+CONTRACT_DISAGREEMENT_PCT = 25.0
 
 
 def parse_value_records(records: Iterable[FCRecord | Mapping[str, Any]]) -> list[FCRecord]:
@@ -25,7 +27,11 @@ def parse_value_records(records: Iterable[FCRecord | Mapping[str, Any]]) -> list
 
 def values_by_sleeper_id(records: Iterable[FCRecord | Mapping[str, Any]]) -> dict[str, FCRecord]:
     parsed = parse_value_records(records)
-    return {record.player.sleeperId: record for record in parsed if record.player.sleeperId}
+    return {
+        record.player.sleeperId: record
+        for record in parsed
+        if record.player.sleeperId and record.player.position != "PICK"
+    }
 
 
 def value_source(
@@ -71,7 +77,11 @@ def pick_value_source(
     )
 
 
-def source_disagreement(sources: list[ValueSourceBreakdown]) -> SourceDisagreement | None:
+def source_disagreement(
+    sources: list[ValueSourceBreakdown],
+    *,
+    threshold_pct: float = CONTRACT_DISAGREEMENT_PCT,
+) -> SourceDisagreement | None:
     enabled_values = [source for source in sources if source.enabled and source.value is not None]
     if len(enabled_values) < 2:
         return None
@@ -81,6 +91,18 @@ def source_disagreement(sources: list[ValueSourceBreakdown]) -> SourceDisagreeme
     if low <= 0:
         return None
     spread = (high - low) / low * 100
-    if spread <= 25:
+    if spread <= threshold_pct:
         return None
     return SourceDisagreement(max_delta_pct=round(spread, 2), sources=enabled_values)
+
+
+def valuation_explanation(
+    tep_tier: TepTier,
+    *,
+    league_format: str | None = None,
+    cache_error: str | None = None,
+) -> str:
+    parts = [tep_source_explanation(tep_tier, league_format=league_format), PICK_TABLE_EXPLANATION]
+    if cache_error:
+        parts.insert(0, cache_error)
+    return " ".join(parts)

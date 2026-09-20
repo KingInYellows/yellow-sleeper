@@ -54,6 +54,7 @@ class SleeperClient:
         cache: Cache | None = None,
         *,
         force: bool = False,
+        variant: str | None = None,
     ) -> CacheReadResult:
         async def fetch() -> dict[str, Any]:
             async with asyncio.TaskGroup() as tg:
@@ -72,7 +73,9 @@ class SleeperClient:
 
         if cache is None:
             return CacheReadResult(await fetch(), "fresh")
-        return await cache.read_or_fetch("league_snapshot", fetch, force=force)
+        return await cache.read_or_fetch(
+            "league_snapshot", fetch, force=force, variant=variant
+        )
 
     async def get_draft_state(
         self,
@@ -80,6 +83,7 @@ class SleeperClient:
         cache: Cache | None = None,
         *,
         force: bool = False,
+        variant: str | None = None,
     ) -> CacheReadResult:
         async def fetch() -> dict[str, Any]:
             async with asyncio.TaskGroup() as tg:
@@ -94,14 +98,18 @@ class SleeperClient:
         # tools polling whats_on_the_clock see new picks within the round.
         ttl_seconds: int | None = None
         try:
-            cached = cache.read("draft_state")
-        except (FileNotFoundError, OSError):
+            cached = cache.read("draft_state", variant=variant)
+        except (FileNotFoundError, OSError, ValueError):
             cached = None
         if isinstance(cached, dict):
             ttl_seconds = draft_state_ttl(cached.get("draft", {}))
 
         return await cache.read_or_fetch(
-            "draft_state", fetch, ttl_seconds=ttl_seconds, force=force
+            "draft_state",
+            fetch,
+            ttl_seconds=ttl_seconds,
+            force=force,
+            variant=variant,
         )
 
     async def probe(self) -> LiveProbeResult:

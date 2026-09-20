@@ -4,7 +4,7 @@ import logging
 import os
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from ruamel.yaml import YAML
@@ -14,12 +14,36 @@ from .models.trade import PolicyOverride
 
 logger = logging.getLogger("yellow_sleeper.config")
 
+TepTier = Literal["off", "te+", "te++"]
+
+LEAGUE_ID_SENTINELS = frozenset({"0", "your_league_id", "changeme"})
+USERNAME_SENTINELS = frozenset({"your_username", "changeme"})
+
+IDENTITY_HELP = (
+    "Set sleeper_league_id and sleeper_username in .yellow-sleeper.yaml "
+    "(copy .yellow-sleeper.yaml.example) or via SLEEPER_LEAGUE_ID and "
+    "SLEEPER_USERNAME. There is no default league or username; the server "
+    "will not guess the first roster."
+)
+
+
+class IdentityConfigError(ValueError):
+    """Raised before league-scoped Sleeper requests when identity is missing."""
+
 
 class StaticConfig(BaseModel):
-    sleeper_league_id: str = Field("0", max_length=20)
-    sleeper_username: str = Field("brad", max_length=100)
+    sleeper_league_id: str = Field("", max_length=20)
+    sleeper_username: str = Field("", max_length=100)
     league_format: str = "14-team SF PPR 0.5 TEP"
     cache_dir: Path = Path(".cache")
+    tep_tier: TepTier = "te+"
+
+    @field_validator("sleeper_league_id", "sleeper_username", "league_format", mode="before")
+    @classmethod
+    def _strip_text(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip()
+        return value
 
 
 class DynamicPolicy(BaseModel):
@@ -68,6 +92,31 @@ class Config:
         self.static_sources = static_sources or ["built-in_default"]
         self._env_policy = env_policy
         self._policy_mtime = yaml_path.stat().st_mtime if yaml_path.exists() else 0.0
+
+    def identity_error(self) -> str | None:
+        missing: list[str] = []
+        league_id = self.static.sleeper_league_id
+        username = self.static.sleeper_username
+        if not league_id or league_id.lower() in LEAGUE_ID_SENTINELS:
+            missing.append("sleeper_league_id")
+        if not username or username.lower() in USERNAME_SENTINELS:
+            missing.append("sleeper_username")
+        if not missing:
+            return None
+        joined = " and ".join(missing)
+        return f"Missing or invalid {joined}. {IDENTITY_HELP}"
+
+    def has_identity(self) -> bool:
+        return self.identity_error() is None
+
+    def require_identity(self) -> None:
+        error = self.identity_error()
+        if error:
+            raise IdentityConfigError(error)
+
+    def redact_secrets(self) -> tuple[str, ...]:
+        values = [self.static.sleeper_league_id, self.static.sleeper_username]
+        return tuple(value for value in values if value and len(value) >= 4)
 
     def policy(self, override: PolicyOverride | None = None) -> tuple[DynamicPolicy, list[str]]:
         sources = list(self._policy_sources)
@@ -146,6 +195,7 @@ def _load_static_config(
         "sleeper_username": "sleeper_username",
         "league_format": "league_format",
         "cache_dir": "cache_dir",
+        "tep_tier": "tep_tier",
     }
     for yaml_key, model_key in yaml_keys.items():
         if yaml_key in yaml_data:
@@ -158,6 +208,7 @@ def _load_static_config(
         "SLEEPER_USERNAME": "sleeper_username",
         "LEAGUE_FORMAT": "league_format",
         "CACHE_DIR": "cache_dir",
+        "YELLOW_SLEEPER_TEP_TIER": "tep_tier",
     }
     for env_key, model_key in env_keys.items():
         if model_key not in values and env_key in env:

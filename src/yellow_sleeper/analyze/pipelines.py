@@ -9,7 +9,7 @@ from typing import Any
 
 from rapidfuzz import fuzz
 
-from ..clients.fantasycalc import FCRecord
+from ..clients.fantasycalc import FCRecord, TepTier
 from ..config import DynamicPolicy
 from ..models import (
     TRADED_PICKS_CAP,
@@ -62,6 +62,7 @@ from .value import (
     pick_value_source,
     player_value_source,
     source_disagreement,
+    valuation_explanation,
     value_source,
     values_by_sleeper_id,
 )
@@ -131,6 +132,9 @@ def get_my_roster_output(
     config_sources: list[str],
     values_cache_status: str = "cached",
     values_cache_error: str | None = None,
+    tep_tier: TepTier = "te+",
+    league_format: str | None = None,
+    values_timestamp: datetime | None = None,
 ) -> GetMyRosterOutput:
     roster_id = find_roster_id_for_username(snapshot, sleeper_username)
     if roster_id is None:
@@ -160,7 +164,7 @@ def get_my_roster_output(
     value_index = values_by_sleeper_id(values)
     player_ids = roster.get("players") or []
     roster_players = [
-        _roster_player(player_id, players, value_index)
+        _roster_player(player_id, players, value_index, timestamp=values_timestamp)
         for player_id in player_ids
         if _player_record(str(player_id), players) is not None
     ]
@@ -192,7 +196,9 @@ def get_my_roster_output(
                 "grouped_roster[].value",
                 "fantasycalc",
                 cache_status=values_cache_status,
-                explanation=values_cache_error,
+                explanation=values_cache_error
+                or valuation_explanation(tep_tier, league_format=league_format),
+                timestamp=values_timestamp,
             ),
         ],
         config_sources=config_sources,
@@ -301,6 +307,9 @@ def get_player_value_output(
     valuation_source: str = "auto",
     values_cache_status: str = "cached",
     values_cache_error: str | None = None,
+    tep_tier: TepTier = "te+",
+    league_format: str | None = None,
+    values_timestamp: datetime | None = None,
 ) -> GetPlayerValueOutput:
     resolution = resolve_player(player, players)
     fantasycalc_enabled = valuation_source != "xlsx"
@@ -312,10 +321,12 @@ def get_player_value_output(
     missing = []
     if resolution.resolved_id:
         if fantasycalc_enabled:
-            source = player_value_source(resolution.resolved_id, value_index)
+            source = player_value_source(
+                resolution.resolved_id, value_index, timestamp=values_timestamp
+            )
             missing_source = "fantasycalc"
         else:
-            source = value_source("xlsx", None, enabled=False)
+            source = value_source("xlsx", None, timestamp=values_timestamp, enabled=False)
             missing_source = "xlsx"
         sources = [source]
         value = source.value
@@ -327,8 +338,9 @@ def get_player_value_output(
     cache_status = values_cache_status if fantasycalc_enabled else CACHE_STATUS_FRESH
     source_note_explanation = (
         values_cache_error
+        or valuation_explanation(tep_tier, league_format=league_format)
         if fantasycalc_enabled
-        else "XLSX valuation source is not implemented in MVP."
+        else "XLSX valuation source is not implemented in this preview."
     )
     data_status = _with_stale_data_status(
         _value_data_status(bool(resolution.resolved_id), value is not None),
@@ -345,6 +357,7 @@ def get_player_value_output(
                 "fantasycalc" if fantasycalc_enabled else "xlsx",
                 cache_status=cache_status,
                 explanation=source_note_explanation,
+                timestamp=values_timestamp,
             )
         ],
         sleeper_id=resolution.resolved_id,
@@ -364,10 +377,13 @@ def analyze_trade_pipeline(
     snapshot: dict[str, Any],
     players: Mapping[str, Any],
     values: Iterable[FCRecord | Mapping[str, Any]],
-    sleeper_username: str = "brad",
+    sleeper_username: str,
     config_sources: list[str] | None = None,
     values_cache_status: str = "cached",
     values_cache_error: str | None = None,
+    tep_tier: TepTier = "te+",
+    league_format: str | None = None,
+    values_timestamp: datetime | None = None,
 ) -> AnalyzeTradeOutput:
     value_records = parse_value_records(values)
     value_index = values_by_sleeper_id(value_records)
@@ -470,7 +486,9 @@ def analyze_trade_pipeline(
                 "value_math",
                 "fantasycalc",
                 cache_status=values_cache_status,
-                explanation=values_cache_error,
+                explanation=values_cache_error
+                or valuation_explanation(tep_tier, league_format=league_format),
+                timestamp=values_timestamp,
             ),
             _source_note(
                 "roster_context.age_stats",
@@ -493,6 +511,9 @@ def league_power_map_output(
     include_pick_value: bool = False,
     values_cache_status: str = "cached",
     values_cache_error: str | None = None,
+    tep_tier: TepTier = "te+",
+    league_format: str | None = None,
+    values_timestamp: datetime | None = None,
 ) -> LeaguePowerMapOutput:
     value_index = values_by_sleeper_id(values)
     names = _user_by_owner(snapshot)
@@ -500,7 +521,9 @@ def league_power_map_output(
     missing_any = False
     for roster in snapshot["rosters"]:
         roster_players = [
-            _roster_player(player_id, players, value_index)
+            _roster_player(
+                player_id, players, value_index, timestamp=values_timestamp
+            )
             for player_id in roster.get("players", [])
             if _player_record(player_id, players) is not None
         ]
@@ -543,7 +566,9 @@ def league_power_map_output(
                 "teams[].roster_total",
                 "fantasycalc",
                 cache_status=values_cache_status,
-                explanation=values_cache_error,
+                explanation=values_cache_error
+                or valuation_explanation(tep_tier, league_format=league_format),
+                timestamp=values_timestamp,
             ),
         ],
         teams=teams,
@@ -608,6 +633,9 @@ def best_player_available_output(
     board_source: str = "fantasycalc",
     values_cache_status: str = "cached",
     values_cache_error: str | None = None,
+    tep_tier: TepTier = "te+",
+    league_format: str | None = None,
+    values_timestamp: datetime | None = None,
 ) -> BestPlayerAvailableOutput:
     drafted = {str(pick.get("player_id")) for pick in draft_state.get("picks", [])}
     value_index = values_by_sleeper_id(values)
@@ -655,7 +683,9 @@ def best_player_available_output(
                 "candidates",
                 "fantasycalc",
                 cache_status=values_cache_status,
-                explanation=values_cache_error,
+                explanation=values_cache_error
+                or valuation_explanation(tep_tier, league_format=league_format),
+                timestamp=values_timestamp,
             )
         ],
         candidates=candidates[:limit],
@@ -729,6 +759,7 @@ def _source_note(
     *,
     cache_status: str = "fresh",
     explanation: str | None = None,
+    timestamp: datetime | None = None,
 ) -> SourceNote:
     stale = cache_status == CACHE_STATUS_STALE
     note_explanation = (
@@ -737,7 +768,7 @@ def _source_note(
     return SourceNote(
         field=field,
         source=source,  # type: ignore[arg-type]
-        timestamp=datetime.now(UTC),
+        timestamp=timestamp or datetime.now(UTC),
         cache_status=cache_status,  # type: ignore[arg-type]
         stale=stale,
         explanation=_truncate(note_explanation) if note_explanation else None,
@@ -760,9 +791,11 @@ def _roster_player(
     player_id: str,
     players: Mapping[str, Any],
     value_index: dict[str, FCRecord],
+    *,
+    timestamp: datetime | None = None,
 ) -> RosterPlayer:
     raw = _player_record(player_id, players) or {}
-    source = player_value_source(str(player_id), value_index)
+    source = player_value_source(str(player_id), value_index, timestamp=timestamp)
     return RosterPlayer(
         sleeper_id=str(player_id),
         name=str(raw.get("full_name") or raw.get("search_full_name") or player_id),
