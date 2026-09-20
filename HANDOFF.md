@@ -98,7 +98,7 @@ PATH="$PWD/.venv/bin:$PATH" python -m pytest tests/ -v
 
 The final run in this workspace passed with 50 tests: 39 unit, 5 integration, and 6 smoke.
 
-Preview candidate verification on `agent/public-developer-preview`: `uv run python -m pytest tests/ -q` passed with **88 tests**.
+Preview candidate verification on `agent/public-developer-preview`: `uv run python -m pytest tests/ -q` passed with **108 tests** (recount after owner-decision tests; was 101 at `6e344a5`, previously documented as 88).
 
 Preview candidate verification is recorded in the section below; re-run those commands on `agent/public-developer-preview`.
 
