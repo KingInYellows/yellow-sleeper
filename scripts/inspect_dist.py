@@ -22,10 +22,18 @@ FORBIDDEN_SUBSTRINGS = (
 )
 
 TEXT_SUFFIXES = (".py", ".md", ".txt", ".toml", ".yaml", ".yml", ".json", ".example")
+LICENSE_NOTICE_STEMS = frozenset({"license", "notice", "copying", "authors", "copyright"})
+COPYRIGHT_HOLDER_NEEDLES = frozenset({"Brad Schwarzkopf"})
 PRIVATE_EXACT_NAMES = frozenset(
     {".env", ".yellow-sleeper.yaml", ".yellow-sleeper.private.yaml"}
 )
 PRIVATE_NAME_GLOBS = (".env.*",)
+
+
+def is_license_notice_member(member_name: str) -> bool:
+    """LICENSE/NOTICE files may contain the copyright holder name."""
+    stem = Path(member_name).name.lower().split(".")[0]
+    return stem in LICENSE_NOTICE_STEMS
 
 
 def is_forbidden_private_config(member_name: str) -> bool:
@@ -59,6 +67,8 @@ def _iter_members(path: Path) -> list[tuple[str, bytes]]:
 
 def _should_scan_text(member_name: str) -> bool:
     base = Path(member_name).name
+    if is_license_notice_member(member_name):
+        return True
     return member_name.endswith(TEXT_SUFFIXES) or base.startswith(".env")
 
 
@@ -84,6 +94,8 @@ def main() -> int:
                 continue
             text = payload.decode("utf-8", errors="replace")
             for needle in FORBIDDEN_SUBSTRINGS:
+                if needle in COPYRIGHT_HOLDER_NEEDLES and is_license_notice_member(inner):
+                    continue
                 if needle in text:
                     print(f"FORBIDDEN {needle!r} in {artifact.name}:{inner}", file=sys.stderr)
                     failed = True

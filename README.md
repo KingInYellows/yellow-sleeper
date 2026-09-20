@@ -15,12 +15,14 @@ This README describes the **public developer-preview candidate** on branch `agen
 
 **Non-goals for this preview:** HTTP hosting, OAuth, Docker, transaction tools, workbook import, conditional-trade engine, multi-user, live API tests, Graphite submit.
 
-## Data-rights blocker (read before install)
+## Data rights (read before install)
 
-- **This repository's code** has **no `LICENSE` on this branch**. License grant is an owner decision (`DECISIONS.md`). Do not treat the preview as OSI-licensed.
-- **Sleeper** data is governed by Sleeper's terms, including third-party access limits. Current public terms: [Sleeper General Terms of Service](https://support.sleeper.com/en/articles/5432002-general-terms-of-service). Commercial or undocumented API use may require Sleeper's consent.
-- **FantasyCalc** values are governed by FantasyCalc's terms. Public pages: [fantasycalc.com/terms](https://fantasycalc.com/terms) and [fantasycalc.com/api-docs](https://fantasycalc.com/api-docs). Those pages did not yield extractable terms text in this preview (JS SPA). Treat reuse rights as **unresolved**.
-- **Blocker:** do not use this preview commercially or redistribute Sleeper/FantasyCalc payloads until the owner confirms rights against current third-party terms. Tests never hit live APIs.
+**MIT covers this repository's code and synthetic fixtures only.** See `LICENSE` and `NOTICE`. It does **not** relicense Sleeper or FantasyCalc APIs, datasets, or caches.
+
+- **What we ship:** code plus synthetic examples (`casey` / league `1234567890`). We do **not** ship live provider dumps or personal workbooks.
+- **Sleeper:** The public API is documented as free for **non-commercial** use; commercial use requires contacting Sleeper about licensing ([Sleeper API](https://docs.sleeper.com/)). Sleeper's [General Terms of Use](https://sleeper.com/terms) grant a limited personal, non-commercial license and prohibit connecting a third-party product that accesses, syncs, retrieves, aggregates, stores, or displays Sleeper data (including league, roster, transaction, scoring, and account data) for that third party's commercial or business purposes without Sleeper's express written consent. The older support-center ToS URL currently 404s; use the live terms page.
+- **FantasyCalc:** Data is copyrighted by FantasyCalc. Documented API use is **non-commercial**, requires attribution and a link to fantasycalc.com, and commercial use needs express written permission. Public-facing apps should email FantasyCalc before launch. Binding text: [Terms of Usage](https://fantasycalc.com/terms-of-usage) and [API Docs](https://fantasycalc.com/api-docs). [`/terms`](https://fantasycalc.com/terms) is a marketing SPA, not the terms text.
+- **Limitation, not a grant:** unresolved commercial and redistribution rights for Sleeper/FantasyCalc payloads remain an explicit limitation. MIT does not grant those rights. Tests never hit live APIs.
 
 ## Supported valuation profile
 
@@ -31,7 +33,7 @@ Pinned FantasyCalc `/values/current` query (supported profile: 14-team Superflex
 - `tep=te+` is the documented discrete TE+ tier (see public `dsheehan167/go-fantasycalc`; re-implemented from PR `#16`, not a local `0.5` multiplier).
 - `tep_tier=off` omits the `tep` key (empty `tep=` errors on the API).
 - `te++` is an explicit heavy-TEP discrete tier.
-- Other `league_format` strings still use this pinned query and are labeled **unsupported approximations** (including empty format, `0.5 PPR` / half-PPR / non-PPR, and `1.5 TEP`). The default `14-team SF PPR 0.5 TEP` string is the supported profile and is not labeled unsupported.
+- Other `league_format` strings still use this pinned query and are labeled **unsupported approximations** (including empty format, `14-team SF PPR` with no TEP token, `214-team`, `1QB` while the query is Superflex/`numQbs=2`, `0.5 PPR` / half-PPR / non-PPR, and `1.5 TEP`). The default `14-team SF PPR 0.5 TEP` string is the supported profile and is not labeled unsupported.
 - **Pick values** use the internal static round table (R1=3000, R2=1200, R3=600, R4=300, R5=100), not FantasyCalc pick rows. Valuation `source_notes` include that table and the TEP query; on stale/error paths the cache error is prepended rather than replacing those sentences.
 - Missing/partial player values stay on the roster or pick list with `data_status` partial/unavailable. The server does not invent numbers.
 
@@ -167,8 +169,7 @@ Do not commit `.env`, `.yellow-sleeper.yaml`, caches, or logs. The example YAML 
 
 - Static pick table, not a live pick market.
 - XLSX overlay, conditionals, transactions, HTTP MCP, OAuth, Docker: out of scope.
-- FantasyCalc SPA terms were not fully extracted; see data-rights blocker.
-- No `LICENSE` file in this PR.
+- MIT covers code and synthetic fixtures only; Sleeper/FantasyCalc commercial and redistribution rights stay a limitation (`NOTICE`).
 - GitHub org `KingInYellows` does not currently enable private vulnerability reporting.
 
 ## Maintainer expectations

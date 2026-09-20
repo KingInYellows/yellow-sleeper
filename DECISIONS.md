@@ -57,3 +57,19 @@ Decision: do not add `LICENSE` on the public developer-preview PR. A proposed MI
 Alternatives considered: ship MIT immediately with a guessed copyright holder.
 
 Why this one: copyright holder and license grant are owner decisions; a silent LICENSE on a published branch would over-claim.
+
+## 2026-09-20 — LICENSE granted as MIT; data-rights limitation recorded
+
+Decision: add MIT License, with the owner's named 2026 copyright as recorded in `LICENSE`, and matching `pyproject.toml` `license` / `license-files` metadata. MIT covers this repository's **code and synthetic fixtures only**. It does not relicense Sleeper or FantasyCalc APIs, datasets, or caches. This preview ships code plus synthetic examples, not live provider dumps or personal workbooks. Unresolved commercial and redistribution rights for provider payloads remain an explicit limitation (`NOTICE`), not a grant.
+
+Sleeper's public API is documented as free for non-commercial use; commercial use requires contacting Sleeper ([docs.sleeper.com](https://docs.sleeper.com/)). Sleeper Terms of Use prohibit third-party commercial access to league/roster data without written consent ([sleeper.com/terms](https://sleeper.com/terms)). FantasyCalc data is copyrighted; documented API use is non-commercial with attribution; commercial use needs written permission ([terms-of-usage](https://fantasycalc.com/terms-of-usage), [api-docs](https://fantasycalc.com/api-docs)). Keep existing authorship notices.
+
+Also: `format_looks_supported` requires an explicit `0.5` TEP token (so `14-team SF PPR` is unsupported), bounds team-count `14` so `214-team` does not match, and rejects `1QB` while the pinned query is `numQbs=2`. Default `14-team SF PPR 0.5 TEP` remains supported.
+
+This supersedes the same-day "LICENSE withheld from this published branch" entry for this candidate.
+
+Alternatives considered: keep the withheld LICENSE; treat MIT as a grant over live API payloads.
+
+Why this one: the copyright holder named the grant; data-rights research showed provider terms still restrict commercial/redistribution use of their datasets.
+
+Sources consulted 2026-09-20 (public pages only; no live league data): [Sleeper API](https://docs.sleeper.com/), [Sleeper Terms of Use](https://sleeper.com/terms), [legacy support ToS URL](https://support.sleeper.com/en/articles/5432002-general-terms-of-service) (404), [FantasyCalc Terms of Usage](https://fantasycalc.com/terms-of-usage), [FantasyCalc API Docs](https://fantasycalc.com/api-docs), [FantasyCalc /terms SPA](https://fantasycalc.com/terms).

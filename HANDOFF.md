@@ -136,7 +136,7 @@ What this candidate adds on top of the MVP handoff above:
 - `dynasty_list_traded_picks` uses `find_roster_id_for_username` instead of roster `0`.
 - Public README, CONTRIBUTING, SECURITY (no invented contact; org private reporting is off).
 - GitHub Actions `test.yml` on GitHub-hosted runners, Python 3.11/3.12, `contents: read`, SHA-pinned actions.
-- LICENSE is **not** in this PR. Proposed MIT patch is an owner decision only (agent store).
+- MIT License (`LICENSE`) with matching `pyproject.toml` license metadata. MIT covers code and synthetic fixtures only; see `NOTICE`.
 
 Verification (preview):
 
@@ -151,8 +151,7 @@ uv run yellow-sleeper --help
 
 Known preview gaps:
 
-- Sleeper/FantasyCalc data-rights still an explicit README blocker.
-- LICENSE grant withheld.
+- Sleeper/FantasyCalc commercial and redistribution rights remain an explicit limitation (`NOTICE`), not a grant.
 - Cursor MCP `mcp.json` fields were checked against https://cursor.com/docs/mcp (docs-only). Stdio initialize/tools/list/tools/call is exercised in `tests/smoke/test_mcp_stdio.py`.
 - Unmerged PRs `#2` `#3` `#13` `#15` `#16` `#18` stay out of this branch.
 

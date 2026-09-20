@@ -11,4 +11,4 @@ If you believe you found a vulnerability in this code:
 
 Operator cache files and `.yellow-sleeper.yaml` can contain league identity. They are gitignored on purpose.
 
-Sleeper and FantasyCalc terms apply to data this server caches. See the data-rights section in `README.md`.
+Sleeper and FantasyCalc terms apply to data this server caches. MIT covers this repository's code and synthetic fixtures only. See `LICENSE`, `NOTICE`, and the data-rights section in `README.md`.

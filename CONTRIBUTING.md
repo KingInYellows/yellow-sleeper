@@ -22,6 +22,7 @@ Tests use hand-crafted fixtures and `respx`. They must not call live Sleeper, Fa
 - Canonical contracts: `PRD.md`, `TOOL_CONTRACTS.md`, `TECHNICAL_SPEC.md`, `DECISIONS.md`. Append amendments; do not silently rewrite historical decisions.
 - Copy `.yellow-sleeper.yaml.example` locally. Never commit `.yellow-sleeper.yaml`, `.env`, caches, or logs.
 - Examples in public files must be synthetic (`casey` / league `1234567890`). Keep authorship notices.
+- MIT (`LICENSE`) covers code and synthetic fixtures only. Do not paste live league data. See `NOTICE`.
 
 ## Pull requests
 

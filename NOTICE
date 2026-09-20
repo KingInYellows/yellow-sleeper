@@ -1,0 +1,33 @@
+Yellow Sleeper
+Copyright (c) 2026 Brad Schwarzkopf
+
+This repository is MIT-licensed (see LICENSE). That grant covers this
+repository's source code and synthetic fixtures only. It does not relicense
+Sleeper or FantasyCalc APIs, datasets, caches, or any live league data.
+
+What this project ships
+- Code and synthetic examples (for example username `casey` and league id
+  `1234567890`).
+- Not live provider dumps, not personal workbooks, and not a dataset of
+  Sleeper or FantasyCalc payloads.
+
+Third-party terms still govern provider data
+- Sleeper: the public API is documented as free for non-commercial use;
+  commercial use requires contacting Sleeper about licensing
+  (https://docs.sleeper.com/). Sleeper's General Terms of Use grant a
+  limited personal, non-commercial license and prohibit connecting a
+  third-party product that accesses, syncs, retrieves, aggregates, stores,
+  or displays Sleeper data (including league, roster, transaction, scoring,
+  and account data) for that third party's commercial or business purposes
+  without Sleeper's express written consent (https://sleeper.com/terms).
+- FantasyCalc: data is copyrighted by FantasyCalc. Documented API use is
+  non-commercial, requires attribution and a link to fantasycalc.com, and
+  commercial use needs express written permission. Public-facing apps should
+  email FantasyCalc before launch. Binding text:
+  https://fantasycalc.com/terms-of-usage and https://fantasycalc.com/api-docs
+  (`/terms` is a marketing SPA; it is not the terms text).
+
+Limitation, not a grant
+Unresolved commercial and redistribution rights for Sleeper and FantasyCalc
+payloads remain an explicit limitation. MIT does not grant those rights.
+Keep existing authorship notices (`Owner: Brad / Yellow Sleeper`).
