@@ -4,7 +4,7 @@ from yellow_sleeper.analyze import build_pick_inventory, find_roster_id_for_user
 
 
 def test_find_roster_id_for_username(sleeper_snapshot: dict) -> None:
-    assert find_roster_id_for_username(sleeper_snapshot, "brad") == 11
+    assert find_roster_id_for_username(sleeper_snapshot, "casey") == 11
 
 
 def test_pick_inventory_applies_traded_overlay(sleeper_snapshot: dict) -> None:
@@ -32,4 +32,4 @@ def test_list_traded_picks_are_enriched(sleeper_snapshot: dict) -> None:
     traded = {pick.pick_token: pick for pick in inventory.traded_picks}
 
     assert traded["pick_2027_r1_orig3"].original_owner_name == "Mike Johnson"
-    assert traded["pick_2027_r1_orig3"].current_owner_name == "Brad Schwarzkopf"
+    assert traded["pick_2027_r1_orig3"].current_owner_name == "Casey Quinn"

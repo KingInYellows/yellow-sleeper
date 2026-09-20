@@ -23,7 +23,7 @@ def _omit_usernames(snapshot: dict[str, Any]) -> dict[str, Any]:
     for user in mutated["users"]:
         user.pop("username", None)
         if user.get("user_id") == "u11":
-            user["display_name"] = "BradSchwarzkopf"
+            user["display_name"] = "CaseyQuinn"
     return mutated
 
 
@@ -72,8 +72,8 @@ def _overcapacity_live_roster(snapshot: dict[str, Any]) -> dict[str, Any]:
 def test_find_roster_id_live_users_omit_username_key(sleeper_snapshot: dict) -> None:
     snapshot = _omit_usernames(sleeper_snapshot)
 
-    assert find_roster_id_for_username(snapshot, "brad") == 11
-    assert find_roster_id_for_username(snapshot, "BradSchwarzkopf") == 11
+    assert find_roster_id_for_username(snapshot, "casey") == 11
+    assert find_roster_id_for_username(snapshot, "CaseyQuinn") == 11
     assert find_roster_id_for_username(snapshot, "YELLOW SLEEPER") == 11
 
 
@@ -207,7 +207,7 @@ def test_get_my_roster_surfaces_overcapacity_and_empty_starters(sleeper_snapshot
         snapshot=snapshot,
         players=load_fixture("sleeper/players_nfl.json"),
         values=load_fixture("fantasycalc/values_current.json"),
-        sleeper_username="brad",
+        sleeper_username="casey",
         policy=DynamicPolicy(),
         config_sources=[".yellow-sleeper.yaml"],
     )
