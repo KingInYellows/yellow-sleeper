@@ -41,6 +41,9 @@ jobs:
       - name: Clean install (frozen lock)
         run: uv sync --frozen --extra dev
 
+      - name: Lockfile check
+        run: uv lock --check
+
       - name: Ruff
         run: uv run ruff check src tests scripts
 

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import sys
 import tarfile
 import zipfile
@@ -20,17 +21,30 @@ FORBIDDEN_SUBSTRINGS = (
     "xoxb-",
 )
 
+TEXT_SUFFIXES = (".py", ".md", ".txt", ".toml", ".yaml", ".yml", ".json", ".example")
+PRIVATE_EXACT_NAMES = frozenset(
+    {".env", ".yellow-sleeper.yaml", ".yellow-sleeper.private.yaml"}
+)
+PRIVATE_NAME_GLOBS = (".env.*",)
 
-def _iter_dist_text(path: Path) -> list[tuple[str, str]]:
-    hits: list[tuple[str, str]] = []
+
+def is_forbidden_private_config(member_name: str) -> bool:
+    base = Path(member_name).name
+    if base.endswith(".example"):
+        return False
+    if base in PRIVATE_EXACT_NAMES:
+        return True
+    return any(fnmatch.fnmatch(base, pattern) for pattern in PRIVATE_NAME_GLOBS)
+
+
+def _iter_members(path: Path) -> list[tuple[str, bytes]]:
+    members: list[tuple[str, bytes]] = []
     if path.suffix == ".whl" or path.name.endswith(".whl"):
         with zipfile.ZipFile(path) as archive:
             for name in archive.namelist():
-                if name.endswith(
-                    (".py", ".md", ".txt", ".toml", ".yaml", ".yml", ".json", ".example")
-                ):
-                    text = archive.read(name).decode("utf-8", errors="replace")
-                    hits.append((name, text))
+                if name.endswith("/"):
+                    continue
+                members.append((name, archive.read(name)))
     elif path.name.endswith(".tar.gz") or path.suffix == ".gz":
         with tarfile.open(path, "r:gz") as archive:
             for member in archive.getmembers():
@@ -39,9 +53,13 @@ def _iter_dist_text(path: Path) -> list[tuple[str, str]]:
                 extracted = archive.extractfile(member)
                 if extracted is None:
                     continue
-                text = extracted.read().decode("utf-8", errors="replace")
-                hits.append((member.name, text))
-    return hits
+                members.append((member.name, extracted.read()))
+    return members
+
+
+def _should_scan_text(member_name: str) -> bool:
+    base = Path(member_name).name
+    return member_name.endswith(TEXT_SUFFIXES) or base.startswith(".env")
 
 
 def main() -> int:
@@ -56,16 +74,19 @@ def main() -> int:
     failed = False
     for artifact in artifacts:
         print(f"inspect {artifact}")
-        for inner, text in _iter_dist_text(artifact):
+        for inner, payload in _iter_members(artifact):
+            if is_forbidden_private_config(inner):
+                print(f"FORBIDDEN private config {artifact.name}:{inner}", file=sys.stderr)
+                failed = True
             if inner.endswith("scripts/inspect_dist.py"):
                 continue
+            if not _should_scan_text(inner):
+                continue
+            text = payload.decode("utf-8", errors="replace")
             for needle in FORBIDDEN_SUBSTRINGS:
                 if needle in text:
                     print(f"FORBIDDEN {needle!r} in {artifact.name}:{inner}", file=sys.stderr)
                     failed = True
-            if inner.endswith(".env") or inner.endswith(".yellow-sleeper.yaml"):
-                print(f"FORBIDDEN private config {artifact.name}:{inner}", file=sys.stderr)
-                failed = True
     return 1 if failed else 0
 
 
