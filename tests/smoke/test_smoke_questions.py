@@ -22,7 +22,7 @@ def test_smoke_1_health_check_standard_envelope() -> None:
             "draft_state": "cached",
         },
         league_id="1234567890",
-        user="brad",
+        user="casey",
         config_sources=[".yellow-sleeper.yaml", "env"],
     )
 
@@ -39,7 +39,7 @@ def test_smoke_2_my_roster_surfaces_values_and_policy_flags(sleeper_snapshot: di
         snapshot=sleeper_snapshot,
         players=load_fixture("sleeper/players_nfl.json"),
         values=load_fixture("fantasycalc/values_current.json"),
-        sleeper_username="brad",
+        sleeper_username="casey",
         policy=DynamicPolicy(protected_players=["Jayden Daniels"]),
         config_sources=[".yellow-sleeper.yaml"],
     )
@@ -83,6 +83,7 @@ def test_smoke_5_blocked_trade_with_hard_untouchable(sleeper_snapshot: dict) -> 
         snapshot=sleeper_snapshot,
         players=load_fixture("sleeper/players_nfl.json"),
         values=load_fixture("fantasycalc/values_current.json"),
+        sleeper_username="casey",
         config_sources=[".yellow-sleeper.yaml"],
     )
 

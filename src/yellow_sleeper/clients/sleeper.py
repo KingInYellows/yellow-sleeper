@@ -54,6 +54,7 @@ class SleeperClient:
         cache: Cache | None = None,
         *,
         force: bool = False,
+        variant: str | None = None,
     ) -> CacheReadResult:
         async def fetch() -> dict[str, Any]:
             async with asyncio.TaskGroup() as tg:
@@ -72,7 +73,14 @@ class SleeperClient:
 
         if cache is None:
             return CacheReadResult(await fetch(), "fresh")
-        return await cache.read_or_fetch("league_snapshot", fetch, force=force)
+        if not variant:
+            raise ValueError(
+                "cache key 'league_snapshot' requires a scope variant; "
+                "unscoped files are never used"
+            )
+        return await cache.read_or_fetch(
+            "league_snapshot", fetch, force=force, variant=variant
+        )
 
     async def get_draft_state(
         self,
@@ -80,6 +88,7 @@ class SleeperClient:
         cache: Cache | None = None,
         *,
         force: bool = False,
+        variant: str | None = None,
     ) -> CacheReadResult:
         async def fetch() -> dict[str, Any]:
             async with asyncio.TaskGroup() as tg:
@@ -89,19 +98,28 @@ class SleeperClient:
 
         if cache is None:
             return CacheReadResult(await fetch(), "fresh")
+        if not variant:
+            raise ValueError(
+                "cache key 'draft_state' requires a scope variant; "
+                "unscoped files are never used"
+            )
 
         # Drop TTL from 1h to 30s once cached state shows the draft is active so
         # tools polling whats_on_the_clock see new picks within the round.
         ttl_seconds: int | None = None
         try:
-            cached = cache.read("draft_state")
-        except (FileNotFoundError, OSError):
+            cached = cache.read("draft_state", variant=variant)
+        except (FileNotFoundError, OSError, ValueError):
             cached = None
         if isinstance(cached, dict):
             ttl_seconds = draft_state_ttl(cached.get("draft", {}))
 
         return await cache.read_or_fetch(
-            "draft_state", fetch, ttl_seconds=ttl_seconds, force=force
+            "draft_state",
+            fetch,
+            ttl_seconds=ttl_seconds,
+            force=force,
+            variant=variant,
         )
 
     async def probe(self) -> LiveProbeResult:

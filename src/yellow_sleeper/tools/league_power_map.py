@@ -19,5 +19,8 @@ async def dynasty_league_power_map(include_pick_value: bool = False) -> dict:
         include_pick_value=include_pick_value,
         values_cache_status=values_result.status,
         values_cache_error=format_cache_error(values_result.error),
+        tep_tier=runtime.config.static.tep_tier,
+        league_format=runtime.config.static.league_format,
+        values_timestamp=values_result.source_timestamp(),
     )
     return output.model_dump(mode="json")

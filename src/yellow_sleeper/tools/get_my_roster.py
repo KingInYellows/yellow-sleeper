@@ -7,7 +7,7 @@ from ..server import mcp
 
 @mcp.tool()
 async def dynasty_get_my_roster() -> dict:
-    """Return Brad's roster with context, policy, and source details."""
+    """Return the configured user's roster with context, policy, and source details."""
     runtime = await get_runtime()
     policy, config_sources = runtime.config.policy()
     snapshot, _ = await runtime.snapshot()
@@ -22,5 +22,8 @@ async def dynasty_get_my_roster() -> dict:
         config_sources=config_sources,
         values_cache_status=values_result.status,
         values_cache_error=format_cache_error(values_result.error),
+        tep_tier=runtime.config.static.tep_tier,
+        league_format=runtime.config.static.league_format,
+        values_timestamp=values_result.source_timestamp(),
     )
     return output.model_dump(mode="json")

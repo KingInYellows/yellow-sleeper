@@ -88,7 +88,7 @@ def find_roster_id_for_username(snapshot: dict[str, Any], username: str) -> int 
 
     Live Sleeper /users objects often omit `username` entirely. Match
     case-insensitively on username, display_name, and metadata.team_name,
-    then a unique compact substring (so "brad" resolves to BradSchwarzkopf),
+    then a unique compact substring (so "casey" resolves to CaseyQuinn),
     then the existing fuzzy roster resolver. Never invent roster 0.
     """
     query = str(username or "").strip()

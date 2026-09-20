@@ -160,3 +160,65 @@ What's next:
 
 Blockers:
 - None.
+
+## 2026-09-20 — Public developer-preview candidate (contract recorded)
+
+Current milestone: public developer-preview candidate on `agent/public-developer-preview`.
+
+What was just completed:
+- Recorded preview contract amendments in `DECISIONS.md`, `TOOL_CONTRACTS.md` §9, `TECHNICAL_SPEC.md` §15, and `PRD.md` (append-only). Historical MVP decisions were not rewritten.
+
+What's next:
+- Implement identity, cache isolation, FantasyCalc `tep=te+` (re-implementing PR #16 ideas with attribution), log redaction, traded-picks roster helper, CI, and public README.
+
+Blockers:
+- LICENSE grant is an owner decision (not included on this branch).
+- Sleeper/FantasyCalc data-rights remain an explicit README blocker pending owner review of current public terms.
+
+## 2026-09-20 — Public developer-preview candidate implemented
+
+Current milestone: public developer-preview candidate on `agent/public-developer-preview` (draft PR).
+
+What was just completed:
+- Explicit identity; scoped cache isolation; FantasyCalc `tep=te+`; log redaction; traded-picks username helper; CI; public README/CONTRIBUTING/SECURITY.
+- Synthetic examples (`casey` / `1234567890`); `.yellow-sleeper.yaml.example` fictional policy; no LICENSE file.
+
+Validation commands run:
+- `uv lock --check` — passed (exit 0). Lock was not stale; not upgraded.
+- `uv sync --frozen --extra dev` — passed (exit 0).
+- `uv run ruff check src tests scripts` — passed (exit 0).
+- `uv run python -m pytest tests/ -q` — passed, **88 tests** at that run (later **101** at `6e344a5`; current recount **108** after owner-decision tests). No live Sleeper/FantasyCalc HTTP.
+- `uv build && uv run python scripts/inspect_dist.py` — passed (exit 0).
+- `uv run pip-audit` — passed, no known vulnerabilities (pip-audit installed in the disposable venv only; not added to `uv.lock`).
+- `uv run yellow-sleeper --help` — passed without identity.
+
+What's next:
+- Owner review of draft PR, LICENSE grant, and Sleeper/FantasyCalc data-rights.
+
+Blockers:
+- LICENSE grant is an owner decision (not included on this branch).
+- Sleeper/FantasyCalc data-rights remain an explicit README blocker.
+
+## 2026-09-20 — Owner decisions: MIT, data-rights, format heuristic
+
+Current milestone: owner decisions landed on `agent/public-developer-preview` (draft PR #19).
+
+What was just completed:
+- MIT License (`LICENSE`) with the owner's named 2026 copyright and `pyproject.toml` `license = "MIT"` / `license-files = ["LICENSE", "NOTICE"]`.
+- `NOTICE` + README data-rights: MIT covers code and synthetic fixtures only; Sleeper/FantasyCalc terms govern their APIs/datasets; we ship code + synthetic examples, not live dumps or workbooks; commercial/redistribution rights stay a limitation, not a grant.
+- `format_looks_supported` requires an explicit `0.5` TEP token, bounds team-count 14 (`214-team` does not match), and rejects `1QB` while the query is `numQbs=2`. Default `14-team SF PPR 0.5 TEP` stays supported.
+
+Validation commands run:
+- `uv lock --check` — passed (exit 0).
+- `uv sync --frozen --extra dev` — passed (exit 0).
+- `uv run ruff check src tests scripts` — passed (exit 0).
+- `uv run python -m pytest tests/ -q` — passed, **108 tests** collected and passed (exit 0). No live Sleeper/FantasyCalc HTTP.
+- `uv build && uv run python scripts/inspect_dist.py` — passed (exit 0). Wheel METADATA `License-Expression: MIT`; LICENSE and NOTICE packed.
+- `uv run yellow-sleeper --help` — passed without identity.
+
+What's next:
+- Coordinator/owner review of draft PR #19. Stay draft.
+
+Blockers:
+- Commercial/redistribution rights for Sleeper and FantasyCalc payloads remain an explicit limitation (`NOTICE`), not a grant.
+

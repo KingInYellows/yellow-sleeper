@@ -394,6 +394,8 @@ Two things to call out from that shape:
 
 2. **No `tep` parameter exists** in the documented query string. The Yellow Sleeper league is 0.5 TEP. This confirms the PRD's call to treat MVP values as "non-TEP approximations" and plan a Stage 2 spreadsheet overlay. There is no engineering workaround in MVP — document it in the source notes so the LLM knows.
 
+   **Amendment 2026-09-20:** the MVP sentence above is historical. Public `dsheehan167/go-fantasycalc` documents discrete `tep=te+` / `te++` (omit the key when off). The developer-preview candidate uses that enum for the supported 14-team SF PPR 0.5 TEP profile. See §15. Do not treat this as a continuous `tep=0.5` float.
+
 ### Query parameters for the Yellow Sleeper league
 
 ```python
@@ -967,9 +969,9 @@ yellow-sleeper --help  # smoke test
       "command": "yellow-sleeper",
       "env": {
         "SLEEPER_LEAGUE_ID": "...",
-        "SLEEPER_USERNAME": "brad",
+        "SLEEPER_USERNAME": "casey",
         "LEAGUE_FORMAT": "14-team SF PPR 0.5 TEP",
-        "CACHE_DIR": "/Users/brad/.yellow-sleeper-cache"
+        "CACHE_DIR": "/home/you/.yellow-sleeper-cache"
       }
     }
   }
@@ -996,9 +998,9 @@ command = "yellow-sleeper"
 
 [mcp_servers.yellow-sleeper.env]
 SLEEPER_LEAGUE_ID = "..."
-SLEEPER_USERNAME = "brad"
+SLEEPER_USERNAME = "casey"
 LEAGUE_FORMAT = "14-team SF PPR 0.5 TEP"
-CACHE_DIR = "/Users/brad/.yellow-sleeper-cache"
+CACHE_DIR = "/home/you/.yellow-sleeper-cache"
 ```
 
 ### `.yellow-sleeper.yaml` example
@@ -1062,3 +1064,17 @@ Explicitly *not* part of this spec; named here so they don't get smuggled into M
 ## 14. Document Status
 
 This specification is engineering-authoritative for implementation. Divergence between this document and the PRD or TOOL_CONTRACTS.md is a bug — reconcile by updating this document first, then PR-ing the corresponding PRD/contracts update. Schema changes follow TOOL_CONTRACTS.md §6.
+
+---
+
+## 15. Public developer-preview amendments (2026-09-20)
+
+Historical §1–14 remain the MVP spec. Preview behavior:
+
+* **Identity:** `StaticConfig.sleeper_league_id` and `sleeper_username` have no built-in defaults. League HTTP starts only after both are present and non-sentinel. Precedence stays YAML > env for static keys; policy stays tool override > YAML > env.
+* **Cache paths:** scoped keys never read unscoped legacy files. FantasyCalc files include schema version `v1` plus sorted query params (including `tep` when set).
+* **FantasyCalc query (supported profile):** `isDynasty=true&numQbs=2&numTeams=14&ppr=1&tep=te+`. `tep_tier=off` omits `tep`. Static pick table unchanged. Source timestamps for cached values use cache file mtime, not “now”.
+* **Logging:** `yellow_sleeper.*` JSON logs redact identity in extras, messages, args, exceptions, and `/league/<id>` URLs. MCP stdout tool payloads are unredacted.
+* **Install examples** use `/home/you/.yellow-sleeper-cache` and username `casey` (synthetic). Authorship owner line is unchanged.
+* **Public YAML sample:** tracked `.yellow-sleeper.yaml.example` uses fictional placeholder policy names. The YAML block under §11 is historical MVP text and is not the public copy-paste sample.
+* **Still deferred:** HTTP transport, Docker, OAuth, transactions, xlsx overlay, FantasyCalc pick ladder as primary pick values, conditionals, multi-user.

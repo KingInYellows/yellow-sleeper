@@ -8,8 +8,9 @@ import os
 import tempfile
 import time
 from collections import defaultdict
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -26,6 +27,12 @@ class CacheReadResult:
     data: Any
     status: CacheStatus
     error: Exception | None = None
+    path: Path | None = None
+
+    def source_timestamp(self) -> datetime:
+        if self.path is not None and self.path.exists():
+            return datetime.fromtimestamp(self.path.stat().st_mtime, UTC)
+        return datetime.now(UTC)
 
 
 def atomic_write_json(path: Path, data: Any, *, gzipped: bool = False) -> None:
@@ -60,22 +67,25 @@ class Cache:
         ttl_seconds: int | None = None,
         gzipped: bool | None = None,
         force: bool = False,
+        variant: str | None = None,
     ) -> CacheReadResult:
         spec = CACHE_SPECS[key]
+        self._require_scope(key, variant)
         ttl = spec.ttl_seconds if ttl_seconds is None else ttl_seconds
         use_gzip = spec.gzipped if gzipped is None else gzipped
-        path = cache_path(self.base_dir, key, gzipped=use_gzip)
+        path = self._resolved_path(key, gzipped=use_gzip, variant=variant)
+        lock_key = f"{key}:{variant}" if variant else key
 
         if not force and self._is_fresh(path, ttl):
-            return CacheReadResult(self._read(path, gzipped=use_gzip), "cached")
+            return CacheReadResult(self._read(path, gzipped=use_gzip), "cached", path=path)
 
-        async with self._locks[key]:
+        async with self._locks[lock_key]:
             if not force and self._is_fresh(path, ttl):
-                return CacheReadResult(self._read(path, gzipped=use_gzip), "cached")
+                return CacheReadResult(self._read(path, gzipped=use_gzip), "cached", path=path)
             try:
                 data = await fetcher()
                 await asyncio.to_thread(atomic_write_json, path, data, gzipped=use_gzip)
-                return CacheReadResult(data, "fresh")
+                return CacheReadResult(data, "fresh", path=path)
             except Exception as exc:
                 if path.exists():
                     logger.warning(
@@ -94,24 +104,50 @@ class Cache:
                             exc_info=True,
                         )
                         raise exc from read_exc
-                    return CacheReadResult(stale_data, "stale", exc)
+                    return CacheReadResult(stale_data, "stale", exc, path=path)
                 raise
 
-    async def write(self, key: CacheKey, data: Any, *, gzipped: bool | None = None) -> None:
+    async def write(
+        self,
+        key: CacheKey,
+        data: Any,
+        *,
+        gzipped: bool | None = None,
+        variant: str | None = None,
+    ) -> None:
         spec = CACHE_SPECS[key]
+        self._require_scope(key, variant)
         use_gzip = spec.gzipped if gzipped is None else gzipped
-        path = cache_path(self.base_dir, key, gzipped=use_gzip)
+        path = self._resolved_path(key, gzipped=use_gzip, variant=variant)
         await asyncio.to_thread(atomic_write_json, path, data, gzipped=use_gzip)
 
-    def read(self, key: CacheKey, *, gzipped: bool | None = None) -> Any:
+    def read(
+        self,
+        key: CacheKey,
+        *,
+        gzipped: bool | None = None,
+        variant: str | None = None,
+    ) -> Any:
         spec = CACHE_SPECS[key]
+        self._require_scope(key, variant)
         use_gzip = spec.gzipped if gzipped is None else gzipped
-        return self._read(cache_path(self.base_dir, key, gzipped=use_gzip), gzipped=use_gzip)
+        return self._read(
+            self._resolved_path(key, gzipped=use_gzip, variant=variant),
+            gzipped=use_gzip,
+        )
 
-    def status(self, key: CacheKey, *, ttl_seconds: int | None = None) -> HealthCacheStatus:
+    def status(
+        self,
+        key: CacheKey,
+        *,
+        ttl_seconds: int | None = None,
+        variant: str | None = None,
+    ) -> HealthCacheStatus:
         spec = CACHE_SPECS[key]
+        if spec.scoped and not variant:
+            return "missing"
         ttl = spec.ttl_seconds if ttl_seconds is None else ttl_seconds
-        path = cache_path(self.base_dir, key, gzipped=spec.gzipped)
+        path = self._resolved_path(key, gzipped=spec.gzipped, variant=variant)
         if not path.exists():
             return "missing"
         age = time.time() - path.stat().st_mtime
@@ -121,8 +157,24 @@ class Cache:
             return "cached"
         return "stale"
 
-    def statuses(self) -> dict[str, HealthCacheStatus]:
-        return {key: self.status(key) for key in CACHE_SPECS}
+    def statuses(
+        self,
+        variants: Mapping[str, str] | None = None,
+    ) -> dict[str, HealthCacheStatus]:
+        variant_map = dict(variants or {})
+        return {key: self.status(key, variant=variant_map.get(key)) for key in CACHE_SPECS}
+
+    def _resolved_path(
+        self, key: CacheKey, *, gzipped: bool, variant: str | None = None
+    ) -> Path:
+        return cache_path(self.base_dir, key, gzipped=gzipped, variant=variant)
+
+    @staticmethod
+    def _require_scope(key: CacheKey, variant: str | None) -> None:
+        if CACHE_SPECS[key].scoped and not variant:
+            raise ValueError(
+                f"cache key {key!r} requires a scope variant; unscoped files are never used"
+            )
 
     @staticmethod
     def _is_fresh(path: Path, ttl_seconds: int) -> bool:
