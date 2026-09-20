@@ -36,6 +36,9 @@ class SleeperClient:
     async def get_traded_picks(self, league_id: str) -> list[dict[str, Any]]:
         return await self._get_with_retry(f"/league/{league_id}/traded_picks")
 
+    async def get_transactions(self, league_id: str, round: int) -> list[dict[str, Any]]:
+        return await self._get_with_retry(f"/league/{league_id}/transactions/{round}")
+
     async def get_drafts(self, league_id: str) -> list[dict[str, Any]]:
         return await self._get_with_retry(f"/league/{league_id}/drafts")
 

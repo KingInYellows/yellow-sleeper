@@ -22,6 +22,7 @@ def test_contract_models_are_exported() -> None:
         "LineupSlot",
         "FindRosterOutput",
         "ListTradedPicksOutput",
+        "ListTransactionsOutput",
         "ListMyPicksOutput",
         "GetPlayerValueOutput",
         "AnalyzeTradeOutput",

@@ -745,6 +745,89 @@ class RefreshCacheOutput(ResponseEnvelope):
 
 ```
 
+
+### 2.12 dynasty_list_transactions
+
+**Purpose:** Return Sleeper league transaction history (trades, waivers, free-agent moves) for one or more weeks, with player-name and draft-pick enrichment for Ledger snapshotting.
+
+**Scope note:** Pending/proposed offers are **not** supported. The public Sleeper API only exposes completed (and other historical) transactions via `GET /v1/league/{id}/transactions/{week}`. No GraphQL, write APIs, or trade-inbox endpoints are used.
+
+**Week selection (documented default):**
+1. If `weeks` is set, fetch exactly those weeks (`week_start`/`week_end` ignored). Include `0` for offseason.
+2. Else if `week_start` and/or `week_end` are set, fetch the inclusive range (missing bound defaults to `0` / `league.settings.leg` or `18`).
+3. Else default to inclusive `0..league.settings.leg`. When `settings.leg` is missing, default to `0..18`.
+
+```python
+class ListTransactionsInput(BaseModel):
+    weeks: Optional[List[int]] = Field(None, max_length=20, description="Explicit weeks; when set, week_start/week_end are ignored.")
+    week_start: Optional[int] = Field(None, ge=0, le=25)
+    week_end: Optional[int] = Field(None, ge=0, le=25)
+    roster_id: Optional[int] = Field(None, description="Keep only transactions whose roster_ids include this roster.")
+    type: Optional[Literal["trade", "waiver", "free_agent"]] = None
+    status: Optional[str] = Field(None, max_length=50, description="e.g. complete")
+
+class TransactionPlayerMove(BaseModel):
+    sleeper_id: str = Field(..., max_length=20)
+    roster_id: int
+    name: str = Field(..., max_length=100)
+    position: Optional[str] = Field(None, max_length=10)
+    team: Optional[str] = Field(None, max_length=10)
+
+class TransactionDraftPick(BaseModel):
+    season: int
+    round: int = Field(..., ge=1, le=10)
+    original_owner_roster_id: int
+    previous_owner_roster_id: Optional[int] = None
+    current_owner_roster_id: int
+    original_owner_name: str = Field(..., max_length=100)
+    previous_owner_name: Optional[str] = Field(None, max_length=100)
+    current_owner_name: str = Field(..., max_length=100)
+    pick_token: str = Field(..., max_length=30)
+    display_name: str = Field(..., max_length=100)
+
+class WaiverBudgetTransfer(BaseModel):
+    sender: int
+    receiver: int
+    amount: int
+    sender_name: str = Field(..., max_length=100)
+    receiver_name: str = Field(..., max_length=100)
+
+class WeekTypeCount(BaseModel):
+    week: int
+    counts: Dict[str, int] = Field(default_factory=dict)
+
+class TransactionRecord(BaseModel):
+    transaction_id: str = Field(..., max_length=40)
+    type: str = Field(..., max_length=30)
+    status: str = Field(..., max_length=50)
+    week: int = Field(..., ge=0, le=25, description="Sleeper leg / NFL week.")
+    created: Optional[int] = Field(None, description="Sleeper created epoch ms.")
+    status_updated: Optional[int] = Field(None, description="Sleeper status_updated epoch ms.")
+    created_iso: Optional[str] = Field(None, max_length=40)
+    status_updated_iso: Optional[str] = Field(None, max_length=40)
+    roster_ids: List[int] = Field(default_factory=list, max_length=20)
+    roster_owner_names: List[str] = Field(default_factory=list, max_length=20)
+    consenter_ids: List[int] = Field(default_factory=list, max_length=20)
+    creator: Optional[str] = Field(None, max_length=40)
+    adds: Optional[Dict[str, int]] = Field(None, description="Near-raw player_id→roster_id; may be null.")
+    drops: Optional[Dict[str, int]] = Field(None, description="Near-raw player_id→roster_id; may be null.")
+    adds_named: List[TransactionPlayerMove] = Field(default_factory=list, max_length=50)
+    drops_named: List[TransactionPlayerMove] = Field(default_factory=list, max_length=50)
+    draft_picks: List[TransactionDraftPick] = Field(default_factory=list, max_length=25)
+    waiver_budget: List[WaiverBudgetTransfer] = Field(default_factory=list, max_length=25)
+    settings: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+class ListTransactionsOutput(ResponseEnvelope):
+    transactions: List[TransactionRecord] = Field(..., max_length=200)
+    truncated: bool = Field(False, description="True when more matching transactions exist than transactions[]. Never silently drop rows.")
+    total_count: int = Field(0, description="Full matching count before the output cap.")
+    weeks_fetched: List[int] = Field(default_factory=list, max_length=20)
+    week_type_counts: List[WeekTypeCount] = Field(default_factory=list, max_length=25)
+
+```
+
+
 ---
 
 ## 3\. Cross-Cutting Validators

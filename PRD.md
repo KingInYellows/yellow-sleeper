@@ -190,6 +190,21 @@ Input: force? (bool, default false) Output:
 * post_status\[\]
 * ...status envelope
 
+### 12\. dynasty_list_transactions
+
+Input: weeks\[\]? OR week_start?/week_end?, roster_id?, type? (trade|waiver|free_agent), status?  
+Default weeks: `0..league.settings.leg`, or `0..18` when leg is missing (week 0 = offseason).
+
+Output:
+
+* transactions\[\] (near-raw Sleeper fields + named adds/drops, enriched draft_picks, waiver_budget)
+* truncated, total_count (cap 200; never silent drop)
+* weeks_fetched\[\], week_type_counts\[\]
+* ...status envelope
+
+**Not supported:** pending/proposed trade offers (no public API / no GraphQL).
+
+
 ---
 
 ## LLM Consumption Contract

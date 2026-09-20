@@ -55,6 +55,29 @@ class Runtime:
         result = await self.sleeper.get_draft_state(draft_id, self.cache, force=force)
         return result.data, result.status
 
+
+    async def fetch_transactions(
+        self,
+        weeks: list[int],
+        *,
+        league_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Fetch Sleeper transactions for multiple weeks (client semaphore limits concurrency)."""
+        lid = league_id or self.config.static.sleeper_league_id
+        if not weeks:
+            return []
+        tasks = [self.sleeper.get_transactions(lid, week) for week in weeks]
+        results = await asyncio.gather(*tasks)
+        combined: list[dict[str, Any]] = []
+        for week, batch in zip(weeks, results, strict=True):
+            for raw in batch:
+                if isinstance(raw, dict):
+                    # Ensure leg is present for callers that omit it.
+                    if raw.get("leg") is None:
+                        raw = {**raw, "leg": week}
+                    combined.append(raw)
+        return combined
+
     async def refresh_all(
         self,
         *,

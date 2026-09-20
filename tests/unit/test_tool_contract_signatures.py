@@ -11,6 +11,7 @@ from yellow_sleeper.models import (
     LeaguePowerMapInput,
     ListMyPicksInput,
     ListTradedPicksInput,
+    ListTransactionsInput,
     RefreshCacheInput,
     WhatsOnTheClockInput,
 )
@@ -22,6 +23,7 @@ from yellow_sleeper.tools.health_check import dynasty_health_check
 from yellow_sleeper.tools.league_power_map import dynasty_league_power_map
 from yellow_sleeper.tools.list_my_picks import dynasty_list_my_picks
 from yellow_sleeper.tools.list_traded_picks import dynasty_list_traded_picks
+from yellow_sleeper.tools.list_transactions import dynasty_list_transactions
 from yellow_sleeper.tools.refresh_cache import dynasty_refresh_cache
 from yellow_sleeper.tools.whats_on_the_clock import dynasty_whats_on_the_clock
 
@@ -31,6 +33,7 @@ def test_tool_wrappers_expose_contract_inputs() -> None:
         (HealthCheckInput, dynasty_health_check),
         (FindRosterInput, dynasty_find_roster),
         (ListTradedPicksInput, dynasty_list_traded_picks),
+        (ListTransactionsInput, dynasty_list_transactions),
         (ListMyPicksInput, dynasty_list_my_picks),
         (GetPlayerValueInput, dynasty_get_player_value),
         (AnalyzeTradeInput, dynasty_analyze_trade),
