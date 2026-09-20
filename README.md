@@ -31,8 +31,8 @@ Pinned FantasyCalc `/values/current` query (supported profile: 14-team Superflex
 - `tep=te+` is the documented discrete TE+ tier (see public `dsheehan167/go-fantasycalc`; re-implemented from PR `#16`, not a local `0.5` multiplier).
 - `tep_tier=off` omits the `tep` key (empty `tep=` errors on the API).
 - `te++` is an explicit heavy-TEP discrete tier.
-- Other `league_format` strings still use this pinned query and are labeled **unsupported approximations**.
-- **Pick values** use the internal static round table (R1=3000, R2=1200, R3=600, R4=300, R5=100), not FantasyCalc pick rows. That fact is always in provenance `source_notes`.
+- Other `league_format` strings still use this pinned query and are labeled **unsupported approximations** (including empty format, `0.5 PPR` / half-PPR / non-PPR, and `1.5 TEP`). The default `14-team SF PPR 0.5 TEP` string is the supported profile and is not labeled unsupported.
+- **Pick values** use the internal static round table (R1=3000, R2=1200, R3=600, R4=300, R5=100), not FantasyCalc pick rows. Valuation `source_notes` include that table and the TEP query; on stale/error paths the cache error is prepended rather than replacing those sentences.
 - Missing/partial player values stay on the roster or pick list with `data_status` partial/unavailable. The server does not invent numbers.
 
 ## Install
@@ -68,7 +68,7 @@ There is **no** silent first-roster or username fallback.
 
 **Static keys** (league id, username, format, cache dir, tep tier): YAML > environment.
 
-**Policy lists** (untouchables / protected players / pick patterns): YAML > environment > tool override.
+**Policy lists** (untouchables / protected players / pick patterns): tool override > YAML > environment.
 
 | YAML | Environment |
 | --- | --- |

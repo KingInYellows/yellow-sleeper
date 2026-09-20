@@ -1071,7 +1071,7 @@ This specification is engineering-authoritative for implementation. Divergence b
 
 Historical §1–14 remain the MVP spec. Preview behavior:
 
-* **Identity:** `StaticConfig.sleeper_league_id` and `sleeper_username` have no built-in defaults. League HTTP starts only after both are present and non-sentinel. Precedence stays YAML > env for static keys; policy stays YAML > env > tool override.
+* **Identity:** `StaticConfig.sleeper_league_id` and `sleeper_username` have no built-in defaults. League HTTP starts only after both are present and non-sentinel. Precedence stays YAML > env for static keys; policy stays tool override > YAML > env.
 * **Cache paths:** scoped keys never read unscoped legacy files. FantasyCalc files include schema version `v1` plus sorted query params (including `tep` when set).
 * **FantasyCalc query (supported profile):** `isDynasty=true&numQbs=2&numTeams=14&ppr=1&tep=te+`. `tep_tier=off` omits `tep`. Static pick table unchanged. Source timestamps for cached values use cache file mtime, not “now”.
 * **Logging:** `yellow_sleeper.*` JSON logs redact identity in extras, messages, args, exceptions, and `/league/<id>` URLs. MCP stdout tool payloads are unredacted.
