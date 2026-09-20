@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import httpx
 import pytest
 import respx
 
 from tests.conftest import load_fixture
 from yellow_sleeper.clients import SleeperClient, build_shared_client, draft_state_ttl
+from yellow_sleeper.store import Cache
 
 
 @pytest.mark.asyncio
@@ -52,3 +55,17 @@ async def test_sleeper_client_does_not_retry_4xx() -> None:
 def test_draft_state_ttl() -> None:
     assert draft_state_ttl({"status": "drafting"}) == 30
     assert draft_state_ttl({"status": "complete"}) == 3600
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_cached_snapshot_requires_variant_before_http(tmp_path: Path) -> None:
+    route = respx.route(host="api.sleeper.app").respond(200, json={})
+    cache = Cache(tmp_path)
+    async with build_shared_client() as http:
+        client = SleeperClient(http)
+        with pytest.raises(ValueError, match="requires a scope variant"):
+            await client.get_league_snapshot("1234567890", cache)
+        with pytest.raises(ValueError, match="requires a scope variant"):
+            await client.get_draft_state("draft-1", cache)
+    assert route.call_count == 0

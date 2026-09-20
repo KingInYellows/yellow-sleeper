@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from datetime import UTC, datetime
 from typing import Literal
@@ -92,8 +93,7 @@ class FantasyCalcClient:
         return fantasycalc_cache_variant(self.query_params)
 
     def supported_profile(self) -> bool:
-        lowered = self.league_format.lower()
-        return "14" in lowered and "sf" in lowered and "ppr" in lowered
+        return format_looks_supported(self.league_format)
 
     async def get_current_values(self) -> list[FCRecord]:
         response = await self._http.get(
@@ -176,11 +176,33 @@ def tep_source_explanation(tep_tier: TepTier, *, league_format: str | None = Non
     else:
         never: TepTier = tep_tier
         raise RuntimeError(f"unhandled tep_tier: {never}")
-    if league_format and not _format_looks_supported(league_format):
+    if league_format is not None and not format_looks_supported(league_format):
         text = f"{text} {UNSUPPORTED_FORMAT_NOTE}"
     return text
 
 
-def _format_looks_supported(league_format: str) -> bool:
+def format_looks_supported(league_format: str | None) -> bool:
+    """True only for the advertised 14-team Superflex full-PPR 0.5 TEP profile.
+
+    Empty format is unsupported. ``0.5 PPR`` / half-PPR / non-PPR / ``1.5 TEP``
+    must not match just because the string contains ``14``, ``sf``, and ``ppr``.
+    """
+    if not league_format or not league_format.strip():
+        return False
     lowered = league_format.lower()
-    return "14" in lowered and "sf" in lowered and "ppr" in lowered
+    if "14" not in lowered:
+        return False
+    if "sf" not in lowered and "superflex" not in lowered:
+        return False
+    if re.search(r"\bnon[\s-]*ppr\b", lowered):
+        return False
+    if re.search(r"\bhalf[\s-]*ppr\b", lowered):
+        return False
+    if re.search(r"0\.5\s*ppr", lowered):
+        return False
+    if re.search(r"\bppr\s*0\.5\b(?!\s*tep)", lowered):
+        return False
+    if not re.search(r"\bppr\b", lowered):
+        return False
+    tep_amounts = re.findall(r"(\d+(?:\.\d+)?)\s*tep\b", lowered)
+    return all(amount == "0.5" for amount in tep_amounts)

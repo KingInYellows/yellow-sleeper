@@ -5,6 +5,7 @@ from .fantasycalc import (
     FCPlayer,
     FCRecord,
     build_query_params,
+    format_looks_supported,
     index_records,
     tep_source_explanation,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "build_query_params",
     "build_shared_client",
     "draft_state_ttl",
+    "format_looks_supported",
     "index_records",
     "tep_source_explanation",
 ]

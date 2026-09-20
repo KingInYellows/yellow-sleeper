@@ -196,8 +196,11 @@ def get_my_roster_output(
                 "grouped_roster[].value",
                 "fantasycalc",
                 cache_status=values_cache_status,
-                explanation=values_cache_error
-                or valuation_explanation(tep_tier, league_format=league_format),
+                explanation=valuation_explanation(
+                    tep_tier,
+                    league_format=league_format,
+                    cache_error=values_cache_error,
+                ),
                 timestamp=values_timestamp,
             ),
         ],
@@ -337,8 +340,11 @@ def get_player_value_output(
         flags.extend(_value_cache_flags(values_cache_status, values_cache_error))
     cache_status = values_cache_status if fantasycalc_enabled else CACHE_STATUS_FRESH
     source_note_explanation = (
-        values_cache_error
-        or valuation_explanation(tep_tier, league_format=league_format)
+        valuation_explanation(
+            tep_tier,
+            league_format=league_format,
+            cache_error=values_cache_error,
+        )
         if fantasycalc_enabled
         else "XLSX valuation source is not implemented in this preview."
     )
@@ -462,6 +468,7 @@ def analyze_trade_pipeline(
         receive_resolutions,
         inventory,
         value_index,
+        timestamp=values_timestamp,
     )
     flags.extend(_missing_value_flags(missing_assets))
     flags.extend(_value_cache_flags(values_cache_status, values_cache_error))
@@ -486,8 +493,11 @@ def analyze_trade_pipeline(
                 "value_math",
                 "fantasycalc",
                 cache_status=values_cache_status,
-                explanation=values_cache_error
-                or valuation_explanation(tep_tier, league_format=league_format),
+                explanation=valuation_explanation(
+                    tep_tier,
+                    league_format=league_format,
+                    cache_error=values_cache_error,
+                ),
                 timestamp=values_timestamp,
             ),
             _source_note(
@@ -566,8 +576,11 @@ def league_power_map_output(
                 "teams[].roster_total",
                 "fantasycalc",
                 cache_status=values_cache_status,
-                explanation=values_cache_error
-                or valuation_explanation(tep_tier, league_format=league_format),
+                explanation=valuation_explanation(
+                    tep_tier,
+                    league_format=league_format,
+                    cache_error=values_cache_error,
+                ),
                 timestamp=values_timestamp,
             ),
         ],
@@ -683,8 +696,11 @@ def best_player_available_output(
                 "candidates",
                 "fantasycalc",
                 cache_status=values_cache_status,
-                explanation=values_cache_error
-                or valuation_explanation(tep_tier, league_format=league_format),
+                explanation=valuation_explanation(
+                    tep_tier,
+                    league_format=league_format,
+                    cache_error=values_cache_error,
+                ),
                 timestamp=values_timestamp,
             )
         ],
@@ -993,6 +1009,8 @@ def _trade_value_math(
     receive: list[AssetResolution],
     inventory: PickInventory,
     value_index: dict[str, FCRecord],
+    *,
+    timestamp: datetime | None = None,
 ) -> tuple[ValueMath, list[str]]:
     per_asset = []
     send_total = 0.0
@@ -1001,14 +1019,16 @@ def _trade_value_math(
     disagreements = []
     for side, resolutions in [("send", send), ("receive", receive)]:
         for resolution in resolutions:
-            value_source = _asset_value_source(resolution, inventory, value_index)
-            value = value_source.value
+            asset_source = _asset_value_source(
+                resolution, inventory, value_index, timestamp=timestamp
+            )
+            value = asset_source.value
             per_asset.append(
                 {
                     "asset": resolution.resolved_id,
                     "side": side,
                     "value": value,
-                    "sources": [value_source],
+                    "sources": [asset_source],
                 }
             )
             if value is None:
@@ -1018,7 +1038,7 @@ def _trade_value_math(
                 send_total += value
             else:
                 receive_total += value
-            disagreement = source_disagreement([value_source])
+            disagreement = source_disagreement([asset_source])
             if disagreement is not None:
                 disagreements.append(disagreement)
     delta = receive_total - send_total
@@ -1039,14 +1059,18 @@ def _asset_value_source(
     resolution: AssetResolution,
     inventory: PickInventory,
     value_index: dict[str, FCRecord],
+    *,
+    timestamp: datetime | None = None,
 ):
     if resolution.asset_type == "player" and resolution.resolved_id:
-        return player_value_source(resolution.resolved_id, value_index)
+        return player_value_source(
+            resolution.resolved_id, value_index, timestamp=timestamp
+        )
     pick = next(
         (pick for pick in inventory.league_picks if pick.pick_token == resolution.resolved_id),
         None,
     )
-    return pick_value_source(pick.round if pick else 0)
+    return pick_value_source(pick.round if pick else 0, timestamp=timestamp)
 
 
 def _trade_data_status(value_math: ValueMath, missing_assets: list[str]) -> DataStatus:

@@ -12,6 +12,7 @@ from yellow_sleeper.clients.fantasycalc import (
     PICK_TABLE_EXPLANATION,
     QUERY_PARAMS,
     build_query_params,
+    format_looks_supported,
     tep_source_explanation,
 )
 from yellow_sleeper.store import Cache
@@ -46,9 +47,46 @@ def test_tep_and_pick_table_explanations() -> None:
     text = tep_source_explanation("te+", league_format="14-team SF PPR 0.5 TEP")
     assert "tep=te+" in text
     assert "0.5 float" not in text or "not a continuous" in text
+    assert "unsupported approximations" not in text.lower()
     unsupported = tep_source_explanation("te+", league_format="12-team 1QB")
     assert "unsupported" in unsupported.lower()
     assert "R1=3000" in PICK_TABLE_EXPLANATION
+
+
+@pytest.mark.parametrize(
+    ("league_format", "supported"),
+    [
+        ("14-team SF PPR 0.5 TEP", True),
+        ("14-team SF 0.5 PPR", False),
+        ("14-team SF half-PPR", False),
+        ("14-team SF non-PPR", False),
+        ("14-team SF PPR 1.5 TEP", False),
+        ("", False),
+        ("12-team 1QB", False),
+    ],
+)
+def test_format_looks_supported_rejects_near_matches(league_format: str, supported: bool) -> None:
+    assert format_looks_supported(league_format) is supported
+    note = tep_source_explanation("te+", league_format=league_format)
+    if supported:
+        assert "unsupported approximations" not in note.lower()
+    else:
+        assert "unsupported approximations" in note.lower()
+
+
+def test_empty_format_is_labeled_unsupported() -> None:
+    assert format_looks_supported(None) is False
+    assert format_looks_supported("") is False
+    assert "unsupported approximations" in tep_source_explanation("te+", league_format="").lower()
+    # Unspecified None does not attach the approximation sentence.
+    assert "unsupported approximations" not in tep_source_explanation("te+").lower()
+
+
+def test_supported_profile_uses_format_helper() -> None:
+    client = FantasyCalcClient(object(), league_format="14-team SF PPR 0.5 TEP")  # type: ignore[arg-type]
+    assert client.supported_profile() is True
+    client.league_format = "14-team SF 0.5 PPR"
+    assert client.supported_profile() is False
 
 
 @pytest.mark.asyncio
