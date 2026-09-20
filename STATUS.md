@@ -7,7 +7,7 @@ Current milestone: Stage 2 (TEP, xlsx overlay, conditionals, as_user, HTTP).
 What was just completed:
 - Restored the package after the sandbox wipe and re-applied Stage 2 on top of `bdc471b6`.
 - Added TEP book (`1 + tep*0.35`), user xlsx/csv overlay, conditional/OR/swap detection, case-insensitive roster match, `as_user`, Starlette `/health` + `/tools/{name}` on 8091, streamable HTTP MCP on 8092.
-- Live config points at Mifflin Doty Dynasty `1312121399602581504` / `BradSchwarzkopf`.
+- Live config points at example league `[redacted]` / `[redacted]`.
 - Intentionally deferred: Docker, OAuth, live Sleeper notifications.
 
 Files touched:
@@ -29,7 +29,7 @@ Files touched:
 - `tests/fixtures/sleeper/users_14team.json`
 
 What's next:
-- Prove stdio MCP handshake + live roster against Mifflin Doty.
+- Prove stdio MCP handshake + live roster against the example league.
 - Keep 8080/8091 up for the desk.
 
 Blockers:

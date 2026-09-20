@@ -18,16 +18,16 @@ def test_find_roster_matches_when_username_is_null() -> None:
     snapshot = {
         "users": [
             {
-                "user_id": "366494220145700864",
+                "user_id": "example-user-id",
                 "username": None,
-                "display_name": "BradSchwarzkopf",
-                "metadata": {"team_name": "Butt Naked Wondas"},
+                "display_name": "example_owner",
+                "metadata": {"team_name": "Example Team"},
             }
         ],
-        "rosters": [{"roster_id": 3, "owner_id": "366494220145700864"}],
+        "rosters": [{"roster_id": 3, "owner_id": "example-user-id"}],
     }
-    assert find_roster_id_for_username(snapshot, "BradSchwarzkopf") == 3
-    assert find_roster_id_for_username(snapshot, "bradschwarzkopf") == 3
-    assert find_roster_id_for_username(snapshot, "366494220145700864") == 3
-    assert find_roster_id_for_username(snapshot, "Butt Naked Wondas") == 3
+    assert find_roster_id_for_username(snapshot, "example_owner") == 3
+    assert find_roster_id_for_username(snapshot, "EXAMPLE_OWNER") == 3
+    assert find_roster_id_for_username(snapshot, "example-user-id") == 3
+    assert find_roster_id_for_username(snapshot, "Example Team") == 3
     assert find_roster_id_for_username(snapshot, "nobody") is None

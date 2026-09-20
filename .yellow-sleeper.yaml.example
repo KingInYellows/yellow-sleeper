@@ -1,6 +1,7 @@
-# Yellow Sleeper trade policy + live league
-sleeper_league_id: "1312121399602581504"
-sleeper_username: BradSchwarzkopf
+# Synthetic example — replace with your own league identity.
+# Copy this file to `.yellow-sleeper.yaml` (or another path via YELLOW_SLEEPER_CONFIG).
+sleeper_league_id: "example-league-id"
+sleeper_username: example_user
 league_format: 14-team SF PPR 0.5 TEP
 tep: 0.5
 xlsx_enabled: false

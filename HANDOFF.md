@@ -2,10 +2,10 @@
 
 ## Stage 2 (2026-08-19)
 
-Live local MCP for Mifflin Doty Dynasty.
+Live local MCP for example league.
 
-- League: `1312121399602581504`
-- User: `BradSchwarzkopf` (Sleeper `username` is null; match display_name)
+- League: `[redacted]`
+- User: `[redacted]` (Sleeper `username` is null; match display_name)
 - Transports: stdio (`yellow-sleeper`), JSON desk (`serve-http` :8091), streamable HTTP MCP (`serve-mcp-http` :8092)
 - TEP: computed `1 + tep*0.35` (0.5 → 1.175x TEs). Raw FantasyCalc stays a second source.
 - xlsx/csv overlay: user rows win. Disagreement only if sources differ >25%.

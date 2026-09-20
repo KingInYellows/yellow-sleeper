@@ -18,15 +18,15 @@ Why this one: the PRD names static table/config as the MVP pick-value source, wh
 
 ## 2026-08-19 — Stage 2 TEP is computed locally
 
-Decision: apply TE premium as `value * (1 + tep * 0.35)` after fetching raw FantasyCalc. Mifflin Doty uses `tep=0.5` (1.175x TEs). Surface the TEP-adjusted book as the `xlsx` source; keep raw FantasyCalc as a second source. User xlsx/csv rows replace the book for that sleeper_id. Flag `source_disagreement` only when enabled sources differ by more than 25%.
+Decision: apply TE premium as `value * (1 + tep * 0.35)` after fetching raw FantasyCalc. The example league uses `tep=0.5` (1.175x TEs). Surface the TEP-adjusted book as the `xlsx` source; keep raw FantasyCalc as a second source. User xlsx/csv rows replace the book for that sleeper_id. Flag `source_disagreement` only when enabled sources differ by more than 25%.
 
 Alternatives considered: pass `tep` to FantasyCalc (404s); leave TEs unadjusted; invent a new source literal (frozen contract only allows fantasycalc/xlsx/config_pick_table).
 
 Why this one: FantasyCalc's public `/values/current` endpoint rejects TEP query params. The frozen `ValueSourceBreakdown.source` literal cannot grow a `tep_book` name.
 
-## 2026-08-19 — Live Mifflin Doty league
+## 2026-08-19 — Live example league
 
-Decision: default live config is league `1312121399602581504`, username `BradSchwarzkopf`. Roster match is case-insensitive across username, display_name, team_name, and user_id because this league's `/users` payload has `username: null`.
+Decision: default live config is league `[redacted]`, username `[redacted]`. Roster match is case-insensitive across username, display_name, team_name, and user_id because this league's `/users` payload has `username: null`.
 
 Alternatives considered: keep default `brad`; require Sleeper username only.
 

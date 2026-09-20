@@ -1,6 +1,6 @@
 # Yellow Sleeper MCP
 
-Local MCP server for Mifflin Doty Dynasty (Sleeper). Facts and flags only.
+Local MCP server for example league (Sleeper). Facts and flags only.
 
 The frozen implementation contract is in `PRD.md`, `TOOL_CONTRACTS.md`, and `TECHNICAL_SPEC.md`.
 

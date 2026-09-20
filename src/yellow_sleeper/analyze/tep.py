@@ -2,7 +2,7 @@
 
 FantasyCalc's public values API does not accept a TEP query parameter (it 404s).
 Stage 2 therefore computes a local book: TE values are multiplied by
-``1 + tep * 0.35``. Mifflin Doty is 0.5 TEP, so TEs display at 1.175x.
+``1 + tep * 0.35``. The example league is 0.5 TEP, so TEs display at 1.175x.
 """
 
 from __future__ import annotations
