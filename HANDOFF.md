@@ -98,6 +98,8 @@ PATH="$PWD/.venv/bin:$PATH" python -m pytest tests/ -v
 
 The final run in this workspace passed with 50 tests: 39 unit, 5 integration, and 6 smoke.
 
+Preview candidate verification is recorded in the section below; re-run those commands on `agent/public-developer-preview`.
+
 ## Known Gaps
 
 Spec deferrals:
@@ -118,3 +120,37 @@ Unresolved questions:
 
 - `goal.md` references PRD `Success Metrics`, but `PRD.md` v0.4.4 does not contain that heading. See `DECISIONS.md` entry "Smoke Scenario Source".
 - MVP pick values required a concrete static table not numerically specified in the frozen docs. See `DECISIONS.md` entry "MVP Pick Value Table".
+
+## Public developer-preview candidate (2026-09-20)
+
+Branch: `agent/public-developer-preview` (not `main`). Draft PR only.
+
+What this candidate adds on top of the MVP handoff above:
+
+- Explicit `sleeper_league_id` / `sleeper_username`; no silent first-roster fallback.
+- Cache files namespaced by league id, draft id+league, and FantasyCalc query shape (`v1` + sorted params). Legacy unscoped files are never trusted.
+- FantasyCalc `tep=te+` for the supported 14-team SF PPR 0.5 TEP profile (re-implemented from PR `#16` ideas; `#16` was not merged). Static pick table unchanged and stated in provenance.
+- Log redaction for messages, args, exceptions, and `/league/<id>` URLs on the `yellow_sleeper` logger.
+- `dynasty_list_traded_picks` uses `find_roster_id_for_username` instead of roster `0`.
+- Public README, CONTRIBUTING, SECURITY (no invented contact; org private reporting is off).
+- GitHub Actions `test.yml` on GitHub-hosted runners, Python 3.11/3.12, `contents: read`, SHA-pinned actions.
+- LICENSE is **not** in this PR. Proposed MIT patch is an owner decision only (agent store).
+
+Verification (preview):
+
+```bash
+uv lock --check
+uv sync --frozen --extra dev
+uv run ruff check src tests scripts
+uv run python -m pytest tests/ -v
+uv build && uv run python scripts/inspect_dist.py
+uv run yellow-sleeper --help
+```
+
+Known preview gaps:
+
+- Sleeper/FantasyCalc data-rights still an explicit README blocker.
+- LICENSE grant withheld.
+- Cursor MCP `mcp.json` fields were checked against https://cursor.com/docs/mcp (docs-only). Stdio initialize/tools/list/tools/call is exercised in `tests/smoke/test_mcp_stdio.py`.
+- Unmerged PRs `#2` `#3` `#13` `#15` `#16` `#18` stay out of this branch.
+

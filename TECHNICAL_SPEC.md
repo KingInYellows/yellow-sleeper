@@ -1076,4 +1076,5 @@ Historical §1–14 remain the MVP spec. Preview behavior:
 * **FantasyCalc query (supported profile):** `isDynasty=true&numQbs=2&numTeams=14&ppr=1&tep=te+`. `tep_tier=off` omits `tep`. Static pick table unchanged. Source timestamps for cached values use cache file mtime, not “now”.
 * **Logging:** `yellow_sleeper.*` JSON logs redact identity in extras, messages, args, exceptions, and `/league/<id>` URLs. MCP stdout tool payloads are unredacted.
 * **Install examples** use `/home/you/.yellow-sleeper-cache` and username `casey` (synthetic). Authorship owner line is unchanged.
+* **Public YAML sample:** tracked `.yellow-sleeper.yaml.example` uses fictional placeholder policy names. The YAML block under §11 is historical MVP text and is not the public copy-paste sample.
 * **Still deferred:** HTTP transport, Docker, OAuth, transactions, xlsx overlay, FantasyCalc pick ladder as primary pick values, conditionals, multi-user.
