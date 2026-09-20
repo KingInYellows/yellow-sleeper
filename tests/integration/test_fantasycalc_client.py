@@ -57,6 +57,12 @@ def test_tep_and_pick_table_explanations() -> None:
     ("league_format", "supported"),
     [
         ("14-team SF PPR 0.5 TEP", True),
+        ("14-team Superflex PPR 0.5 TEP", True),
+        ("14-team SF PPR", False),
+        ("214-team SF PPR 0.5 TEP", False),
+        ("114-team SF PPR 0.5 TEP", False),
+        ("14-team SF 1QB PPR 0.5 TEP", False),
+        ("14-team Superflex 1QB PPR 0.5 TEP", False),
         ("14-team SF 0.5 PPR", False),
         ("14-team SF half-PPR", False),
         ("14-team SF non-PPR", False),

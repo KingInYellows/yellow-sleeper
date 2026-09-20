@@ -186,13 +186,18 @@ def format_looks_supported(league_format: str | None) -> bool:
 
     Empty format is unsupported. ``0.5 PPR`` / half-PPR / non-PPR / ``1.5 TEP``
     must not match just because the string contains ``14``, ``sf``, and ``ppr``.
+    Team count 14 must not match as a substring of ``214-team``. Superflex
+    queries (``numQbs=2``) reject ``1QB``. TEP requires an explicit ``0.5``
+    token so ``14-team SF PPR`` (no TEP) is unsupported.
     """
     if not league_format or not league_format.strip():
         return False
     lowered = league_format.lower()
-    if "14" not in lowered:
+    if not re.search(r"(?<!\d)14(?:\s*-?\s*team)?\b", lowered):
         return False
     if "sf" not in lowered and "superflex" not in lowered:
+        return False
+    if re.search(r"\b1\s*qb\b", lowered):
         return False
     if re.search(r"\bnon[\s-]*ppr\b", lowered):
         return False
@@ -205,4 +210,6 @@ def format_looks_supported(league_format: str | None) -> bool:
     if not re.search(r"\bppr\b", lowered):
         return False
     tep_amounts = re.findall(r"(\d+(?:\.\d+)?)\s*tep\b", lowered)
+    if not tep_amounts:
+        return False
     return all(amount == "0.5" for amount in tep_amounts)
