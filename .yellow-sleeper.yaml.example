@@ -1,12 +1,19 @@
-# Yellow Sleeper trade policy
+# Copy to .yellow-sleeper.yaml and set your league identity.
+# Static keys: YAML beats environment variables.
+# Policy lists: YAML beats env; tool arguments beat YAML.
+# There is no default league or username.
+
+sleeper_league_id: "1234567890"
+sleeper_username: casey
+league_format: "14-team SF PPR 0.5 TEP"
+tep_tier: te+
+cache_dir: .cache
+
+# Fictional example policy — replace with your own names. These are not
+# a copied operator untouchable list.
 hard_untouchables:
-  - Drake London
-  - Harold Fannin
-
+  - Example Franchise Quarterback
 protected_players:
-  - Jayden Daniels
-  - Jaxon Smith-Njigba
-
+  - Example Young Wide Receiver
 protected_pick_patterns:
-  - 2027 1st
-  - 2028 1st
+  - 2029 1st

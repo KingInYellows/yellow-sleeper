@@ -11,3 +11,16 @@ dist/
 build/
 ruvector.db
 *.db
+
+# Operator secrets and private overlays (do not ignore all CSV/JSON/YAML)
+.env
+.env.*
+!.env.example
+*.log
+logs/
+.yellow-sleeper.yaml
+!.yellow-sleeper.yaml.example
+.yellow-sleeper.private.yaml
+*.overlay.csv
+*.overlay.xlsx
+*.overlay.json
