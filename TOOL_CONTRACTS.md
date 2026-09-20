@@ -307,7 +307,7 @@ class HealthCheckOutput(ResponseEnvelope):
     "draft_state": "missing"
   },
   "league_id": "1234567890",
-  "user": "brad",
+  "user": "casey",
   "errors": \[\],
   "live_probe_results": null
 }
@@ -918,3 +918,15 @@ Items the contracts surface that belong to the technical spec, not here:
 ## 8\. Document Status
 
 This contracts document is engineering-authoritative for tool I/O shapes. Any divergence between this document and PRD v0.4.4 is a bug in this document; report and reconcile. Schema-breaking changes follow the policy in §6 and require a parallel update to the PRD's `Schema_version` field.
+
+---
+
+## 9. Public developer-preview amendments (2026-09-20)
+
+Historical §1–8 remain the MVP contract. These amendments apply to the public developer-preview candidate and do not bump `schema_version`.
+
+* **Identity:** `dynasty_*` tools that read a league snapshot require configured `sleeper_league_id` and `sleeper_username`. There is no default user. `dynasty_health_check` (cache-only) and process `--help` remain usable when identity is missing; they report the gap instead of guessing a roster. `dynasty_list_traded_picks` resolves the configured username with the same helper as `dynasty_list_my_picks` and must not hardcode `my_roster_id=0`.
+* **Examples:** JSON examples use synthetic identity (`user: "casey"`, league id `1234567890`). Authorship notices (`Owner: Brad / Yellow Sleeper`) stay. Tool purposes that said “Brad's roster/picks” mean the configured owner.
+* **Valuation provenance:** FantasyCalc player values for the supported 14-team SF PPR 0.5 TEP profile use discrete `tep=te+` (not a continuous 0.5 float). Pick values still use `config_pick_table` (R1=3000, R2=1200, R3=600, R4=300, R5=100). Both facts belong in `source_notes`. Missing/partial player or pick values stay `PARTIAL` / `missing_value` rather than invented numbers.
+* **Cache contract keys** (`sleeper_players_nfl`, `fantasycalc_values`, `league_snapshot`, `draft_state`) are unchanged in health output. On disk they are isolated by league id, draft id+scope, and FantasyCalc query shape plus schema version.
+* **Logging:** identity in this app’s log files is redacted. Tool response bodies are not.

@@ -239,3 +239,17 @@ CACHE_DIR = ".cache"
 This is the agent/coding canonical base PRD for MVP. No other version, tool, or document is required to implement, test, or reason about the MCP server’s required MVP behaviors.
 
 ---
+
+## Public developer-preview amendments (2026-09-20)
+
+The historical MVP text above is preserved. The public preview candidate additionally requires:
+
+* Explicit league id and Sleeper username; no silent first-roster or default-username fallback.
+* Neutral synthetic examples in public docs/fixtures (authorship notices kept).
+* Honest FantasyCalc `tep=te+` provenance for the supported 0.5 TEP profile, plus the existing static pick table.
+* Cache isolation by league / draft / valuation query so one cache directory cannot satisfy another identity.
+* Local stdio MCP only: no HTTP hosting, OAuth, Docker, transaction tools, workbook import, conditional-trade engine, or multi-user.
+
+Tool docstrings in the preview say “the configured user’s …” rather than a personal name. Frozen MVP wording that says “Brad’s roster” is interpreted as the configured owner.
+
+---

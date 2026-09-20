@@ -160,3 +160,17 @@ What's next:
 
 Blockers:
 - None.
+
+## 2026-09-20 — Public developer-preview candidate (contract recorded)
+
+Current milestone: public developer-preview candidate on `agent/public-developer-preview`.
+
+What was just completed:
+- Recorded preview contract amendments in `DECISIONS.md`, `TOOL_CONTRACTS.md` §9, `TECHNICAL_SPEC.md` §15, and `PRD.md` (append-only). Historical MVP decisions were not rewritten.
+
+What's next:
+- Implement identity, cache isolation, FantasyCalc `tep=te+` (re-implementing PR #16 ideas with attribution), log redaction, traded-picks roster helper, CI, and public README.
+
+Blockers:
+- LICENSE grant is an owner decision (not included on this branch).
+- Sleeper/FantasyCalc data-rights remain an explicit README blocker pending owner review of current public terms.
