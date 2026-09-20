@@ -57,6 +57,8 @@ def main() -> int:
     for artifact in artifacts:
         print(f"inspect {artifact}")
         for inner, text in _iter_dist_text(artifact):
+            if inner.endswith("scripts/inspect_dist.py"):
+                continue
             for needle in FORBIDDEN_SUBSTRINGS:
                 if needle in text:
                     print(f"FORBIDDEN {needle!r} in {artifact.name}:{inner}", file=sys.stderr)

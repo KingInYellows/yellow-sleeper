@@ -91,7 +91,7 @@ async def test_mcp_stdio_initialize_tools_list_and_synthetic_calls(tmp_path: Pat
 
             traded = await session.call_tool("dynasty_list_traded_picks", {})
             traded_payload = _tool_json(traded)
-            assert traded_payload["resolution_status"] == "ok"
+            assert traded_payload["resolution_status"] == "OK"
             assert traded_payload["total_count"] >= 1
             assert any(
                 pick.get("current_owner_name") == "Casey Quinn"

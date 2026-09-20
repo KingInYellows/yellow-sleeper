@@ -112,7 +112,7 @@ async def test_list_traded_picks_uses_username_roster_helper(tmp_path: Path) -> 
             payload = await dynasty_list_traded_picks()
         finally:
             runtime_mod.set_runtime(None)
-    assert payload["resolution_status"] == "ok"
+    assert payload["resolution_status"] == "OK"
     assert payload["picks"]
     assert any(pick.get("current_owner_name") == "Casey Quinn" for pick in payload["picks"])
 
@@ -139,7 +139,7 @@ async def test_list_traded_picks_does_not_hardcode_roster_zero(tmp_path: Path) -
             payload = await dynasty_list_traded_picks()
         finally:
             runtime_mod.set_runtime(None)
-    assert payload["resolution_status"] == "needs_clarification"
+    assert payload["resolution_status"] == "NEEDS_CLARIFICATION"
     assert payload["picks"] == []
-    assert payload["data_status"] == "unavailable"
+    assert payload["data_status"] == "UNAVAILABLE"
 

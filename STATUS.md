@@ -174,3 +174,28 @@ What's next:
 Blockers:
 - LICENSE grant is an owner decision (not included on this branch).
 - Sleeper/FantasyCalc data-rights remain an explicit README blocker pending owner review of current public terms.
+
+## 2026-09-20 — Public developer-preview candidate implemented
+
+Current milestone: public developer-preview candidate on `agent/public-developer-preview` (draft PR).
+
+What was just completed:
+- Explicit identity; scoped cache isolation; FantasyCalc `tep=te+`; log redaction; traded-picks username helper; CI; public README/CONTRIBUTING/SECURITY.
+- Synthetic examples (`casey` / `1234567890`); `.yellow-sleeper.yaml.example` fictional policy; no LICENSE file.
+
+Validation commands run:
+- `uv lock --check` — passed (exit 0). Lock was not stale; not upgraded.
+- `uv sync --frozen --extra dev` — passed (exit 0).
+- `uv run ruff check src tests scripts` — passed (exit 0).
+- `uv run python -m pytest tests/ -q` — passed, **88 tests** (exit 0). No live Sleeper/FantasyCalc HTTP.
+- `uv build && uv run python scripts/inspect_dist.py` — passed (exit 0).
+- `uv run pip-audit` — passed, no known vulnerabilities (pip-audit installed in the disposable venv only; not added to `uv.lock`).
+- `uv run yellow-sleeper --help` — passed without identity.
+
+What's next:
+- Owner review of draft PR, LICENSE grant, and Sleeper/FantasyCalc data-rights.
+
+Blockers:
+- LICENSE grant is an owner decision (not included on this branch).
+- Sleeper/FantasyCalc data-rights remain an explicit README blocker.
+
