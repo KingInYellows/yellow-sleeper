@@ -317,3 +317,24 @@ What's next:
 Blockers:
 - Commercial/redistribution rights for Sleeper and FantasyCalc payloads remain an explicit limitation (`NOTICE`), not a grant.
 
+## 2026-09-21 — Codex P1s: mixed-OR blocking and range extrema
+
+Current milestone: conditional/swap ranges on `cursor/conditional-swap-ranges-f829` (PR #26).
+
+What was just completed:
+- Mixed player-or-pick OR inspects each candidate. Sending a hard-untouchable player OR a pick still blocks.
+- Open-ended `delta_min` / `delta_max` is computed from per-asset extrema, not a Cartesian product of scenarios. `PARTIAL` + `NEEDS_CLARIFICATION` is unchanged. A normal trade still returns one `delta`.
+- Review threads left unresolved. Did not merge. Tag `v0.2.0` stays on `617427ff`.
+
+Validation commands run:
+- `uv lock --check` — passed (exit 0).
+- `uv run ruff check src tests scripts` — passed (exit 0).
+- `uv run python -m pytest tests/ -q` — passed, **149 tests** collected and passed (exit 0). No live Sleeper/FantasyCalc HTTP.
+- `HTTP(S)_PROXY=http://127.0.0.1:1 HTTPS_PROXY=http://127.0.0.1:1 uv run python -m pytest tests/ -q` — passed, **149 tests** (exit 0).
+
+What's next:
+- Coordinator/owner review. Do not merge from this change. Review threads stay open.
+
+Blockers:
+- Commercial/redistribution rights for Sleeper and FantasyCalc payloads remain an explicit limitation (`NOTICE`), not a grant.
+
