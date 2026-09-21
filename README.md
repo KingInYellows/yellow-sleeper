@@ -2,7 +2,7 @@
 
 Local, single-user, read-only stdio MCP server for one Sleeper dynasty league. It answers roster, pick, value, and trade-guardrail questions for a configured owner. It does not place waivers, send trades, host HTTP, or talk to paid models.
 
-This README describes current `main`. Settings-matched FantasyCalc valuations and provider-backed picks are on this branch. Unmerged feature PRs are not.
+This README describes the **v0.2.0 developer prerelease** (current `main`). Settings-matched FantasyCalc valuations and provider-backed picks are in that tag. Unmerged feature PRs are not.
 
 ## What this is vs what it is not
 
@@ -46,16 +46,19 @@ Default query: `isDynasty=true&numQbs=2&numTeams=14&ppr=1&tep=te+`
 
 ## Install
 
+**v0.2.0 is a developer prerelease.** It is not on PyPI. Install from that tag.
+
 Python 3.11+ (3.12 is the primary CI image). [`uv`](https://docs.astral.sh/uv/) is the package manager.
 
 ```bash
 git clone https://github.com/KingInYellows/yellow-sleeper.git
 cd yellow-sleeper
+git checkout v0.2.0
 uv sync --extra dev
 uv run yellow-sleeper --help
 ```
 
-Or `uv tool install .` then `yellow-sleeper --help`. Help works with no league configured.
+Equivalent: `uv tool install git+https://github.com/KingInYellows/yellow-sleeper.git@v0.2.0` then `yellow-sleeper --help`. Help works with no league configured.
 
 Copy the synthetic example (tracked) and fill **your** identity:
 
