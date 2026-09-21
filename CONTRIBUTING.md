@@ -1,6 +1,6 @@
 # Contributing
 
-This is a personal dynasty MCP server. The public developer-preview candidate lives on `agent/public-developer-preview`. Do not push to `main`.
+This is a personal dynasty MCP server. Current installable code is on `main`. Open draft PRs from `agent/` branches; do not push to `main`.
 
 ## Setup
 
