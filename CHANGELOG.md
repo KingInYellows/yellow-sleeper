@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Conditional, exclusive-OR, and pick-swap trade language returns `PARTIAL` + clarification with candidates or `delta_min` / `delta_max`, not one invented delta. A normal trade still returns one value. No write/submit tools.
+
 ## [0.2.0] — 2026-09-21
 
 Developer prerelease. First public tag of current `main`. Not published to PyPI.
