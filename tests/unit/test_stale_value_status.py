@@ -26,7 +26,7 @@ def test_get_player_value_surfaces_stale_fantasycalc_values() -> None:
     assert "FantasyCalc validation failed" in explanation
     assert "tep=te+" in explanation
     assert "R1=3000" in explanation
-    assert "unsupported approximations" not in explanation.lower()
+    assert "not fetched" not in explanation.lower()
 
 
 def test_stale_trade_notes_keep_tep_and_pick_table(sleeper_snapshot: dict) -> None:

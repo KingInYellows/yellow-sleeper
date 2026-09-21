@@ -109,12 +109,16 @@ async def test_valuation_cache_is_isolated_by_query_shape(tmp_path: Path) -> Non
     cache = Cache(tmp_path)
     te_plus = fantasycalc_cache_variant(build_query_params("te+"))
     te_off = fantasycalc_cache_variant(build_query_params("off"))
+    twelve = fantasycalc_cache_variant(build_query_params("off", num_teams="12", num_qbs="1"))
     await cache.write("fantasycalc_values", [{"tep": "te+"}], variant=te_plus)
 
     assert cache.read("fantasycalc_values", variant=te_plus) == [{"tep": "te+"}]
     with pytest.raises(FileNotFoundError):
         cache.read("fantasycalc_values", variant=te_off)
+    with pytest.raises(FileNotFoundError):
+        cache.read("fantasycalc_values", variant=twelve)
     assert te_plus != te_off
+    assert te_plus != twelve
     assert "v1" in te_plus
     assert "tep-te+" in te_plus
 

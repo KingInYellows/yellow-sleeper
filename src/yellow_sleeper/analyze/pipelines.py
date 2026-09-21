@@ -9,7 +9,7 @@ from typing import Any
 
 from rapidfuzz import fuzz
 
-from ..clients.fantasycalc import FCRecord, TepTier
+from ..clients.fantasycalc import FCRecord, TepTier, format_looks_supported
 from ..config import DynamicPolicy
 from ..models import (
     TRADED_PICKS_CAP,
@@ -57,8 +57,9 @@ from .roster import (
     find_roster_id_for_username,
 )
 from .value import (
-    PICK_VALUE_BY_ROUND,
     parse_value_records,
+    pick_records,
+    pick_records_by_name,
     pick_value_source,
     player_value_source,
     source_disagreement,
@@ -74,6 +75,16 @@ POSITIONS = ("QB", "RB", "WR", "TE")
 CACHE_STATUS_FRESH = "fresh"
 CACHE_STATUS_CACHED = "cached"
 CACHE_STATUS_STALE = "stale"
+
+
+def _values_for_query(
+    values: Iterable[FCRecord | Mapping[str, Any]],
+    league_format: str | None,
+    tep_tier: TepTier,
+) -> Iterable[FCRecord | Mapping[str, Any]]:
+    if league_format and not format_looks_supported(league_format, tep_tier=tep_tier):
+        return []
+    return values
 
 
 def health_check_output(
@@ -161,7 +172,8 @@ def get_my_roster_output(
             age_stats=_age_stats([], []),
         )
     roster = _roster_by_id(snapshot, roster_id)
-    value_index = values_by_sleeper_id(values)
+    usable_values = _values_for_query(values, league_format, tep_tier)
+    value_index = values_by_sleeper_id(usable_values)
     player_ids = roster.get("players") or []
     roster_players = [
         _roster_player(player_id, players, value_index, timestamp=values_timestamp)
@@ -200,6 +212,7 @@ def get_my_roster_output(
                     tep_tier,
                     league_format=league_format,
                     cache_error=values_cache_error,
+                    pick_rows_present=bool(pick_records(usable_values)),
                 ),
                 timestamp=values_timestamp,
             ),
@@ -316,7 +329,10 @@ def get_player_value_output(
 ) -> GetPlayerValueOutput:
     resolution = resolve_player(player, players)
     fantasycalc_enabled = valuation_source != "xlsx"
-    value_index = values_by_sleeper_id(values) if fantasycalc_enabled else {}
+    usable_values = (
+        _values_for_query(values, league_format, tep_tier) if fantasycalc_enabled else []
+    )
+    value_index = values_by_sleeper_id(usable_values) if fantasycalc_enabled else {}
     flags: list[PolicyFlag] = []
     candidates = resolution.candidates if resolution.manual_review else []
     value = None
@@ -344,6 +360,7 @@ def get_player_value_output(
             tep_tier,
             league_format=league_format,
             cache_error=values_cache_error,
+            pick_rows_present=bool(pick_records(usable_values)) if fantasycalc_enabled else False,
         )
         if fantasycalc_enabled
         else "XLSX valuation source is not implemented in this preview."
@@ -391,8 +408,9 @@ def analyze_trade_pipeline(
     league_format: str | None = None,
     values_timestamp: datetime | None = None,
 ) -> AnalyzeTradeOutput:
-    value_records = parse_value_records(values)
+    value_records = parse_value_records(_values_for_query(values, league_format, tep_tier))
     value_index = values_by_sleeper_id(value_records)
+    pick_index = pick_records_by_name(value_records)
     my_roster_id = find_roster_id_for_username(snapshot, sleeper_username)
     if my_roster_id is None:
         return AnalyzeTradeOutput(
@@ -468,6 +486,7 @@ def analyze_trade_pipeline(
         receive_resolutions,
         inventory,
         value_index,
+        pick_index,
         timestamp=values_timestamp,
     )
     flags.extend(_missing_value_flags(missing_assets))
@@ -497,6 +516,7 @@ def analyze_trade_pipeline(
                     tep_tier,
                     league_format=league_format,
                     cache_error=values_cache_error,
+                    pick_rows_present=bool(pick_index),
                 ),
                 timestamp=values_timestamp,
             ),
@@ -525,7 +545,9 @@ def league_power_map_output(
     league_format: str | None = None,
     values_timestamp: datetime | None = None,
 ) -> LeaguePowerMapOutput:
-    value_index = values_by_sleeper_id(values)
+    usable_values = _values_for_query(values, league_format, tep_tier)
+    value_index = values_by_sleeper_id(usable_values)
+    pick_index = pick_records_by_name(usable_values)
     names = _user_by_owner(snapshot)
     teams: list[TeamRollup] = []
     missing_any = False
@@ -555,7 +577,14 @@ def league_power_map_output(
                 positional_rollups=rollups,  # type: ignore[arg-type]
                 roster_total=roster_total,
                 pick_total=(
-                    _pick_total(snapshot, int(roster["roster_id"])) if include_pick_value else None
+                    _pick_total(
+                        snapshot,
+                        int(roster["roster_id"]),
+                        pick_index,
+                        timestamp=values_timestamp,
+                    )
+                    if include_pick_value
+                    else None
                 ),
                 roster_age=_age_stats(roster_players, roster_players),
                 missing_flags=missing[:10],
@@ -580,6 +609,7 @@ def league_power_map_output(
                     tep_tier,
                     league_format=league_format,
                     cache_error=values_cache_error,
+                    pick_rows_present=bool(pick_index),
                 ),
                 timestamp=values_timestamp,
             ),
@@ -651,7 +681,8 @@ def best_player_available_output(
     values_timestamp: datetime | None = None,
 ) -> BestPlayerAvailableOutput:
     drafted = {str(pick.get("player_id")) for pick in draft_state.get("picks", [])}
-    value_index = values_by_sleeper_id(values)
+    usable_values = _values_for_query(values, league_format, tep_tier)
+    value_index = values_by_sleeper_id(usable_values)
     candidates = []
     excluded = 0
     for player_id, raw in players.items():
@@ -700,6 +731,7 @@ def best_player_available_output(
                     tep_tier,
                     league_format=league_format,
                     cache_error=values_cache_error,
+                    pick_rows_present=bool(pick_records(usable_values)),
                 ),
                 timestamp=values_timestamp,
             )
@@ -1009,6 +1041,7 @@ def _trade_value_math(
     receive: list[AssetResolution],
     inventory: PickInventory,
     value_index: dict[str, FCRecord],
+    pick_index: Mapping[str, FCRecord],
     *,
     timestamp: datetime | None = None,
 ) -> tuple[ValueMath, list[str]]:
@@ -1020,7 +1053,7 @@ def _trade_value_math(
     for side, resolutions in [("send", send), ("receive", receive)]:
         for resolution in resolutions:
             asset_source = _asset_value_source(
-                resolution, inventory, value_index, timestamp=timestamp
+                resolution, inventory, value_index, pick_index, timestamp=timestamp
             )
             value = asset_source.value
             per_asset.append(
@@ -1059,6 +1092,7 @@ def _asset_value_source(
     resolution: AssetResolution,
     inventory: PickInventory,
     value_index: dict[str, FCRecord],
+    pick_index: Mapping[str, FCRecord],
     *,
     timestamp: datetime | None = None,
 ):
@@ -1070,7 +1104,12 @@ def _asset_value_source(
         (pick for pick in inventory.league_picks if pick.pick_token == resolution.resolved_id),
         None,
     )
-    return pick_value_source(pick.round if pick else 0, timestamp=timestamp)
+    return pick_value_source(
+        pick.round if pick else 0,
+        pick=pick,
+        pick_index=pick_index,
+        timestamp=timestamp,
+    )
 
 
 def _trade_data_status(value_math: ValueMath, missing_assets: list[str]) -> DataStatus:
@@ -1209,9 +1248,22 @@ def _user_by_owner(snapshot: dict[str, Any]) -> dict[int, dict[str, str]]:
     return result
 
 
-def _pick_total(snapshot: dict[str, Any], roster_id: int) -> float:
+def _pick_total(
+    snapshot: dict[str, Any],
+    roster_id: int,
+    pick_index: Mapping[str, FCRecord],
+    *,
+    timestamp: datetime | None = None,
+) -> float:
     inventory = build_pick_inventory(snapshot, my_roster_id=roster_id)
-    return sum(PICK_VALUE_BY_ROUND.get(pick.round, 0.0) for pick in inventory.owned_picks)
+    total = 0.0
+    for pick in inventory.owned_picks:
+        source = pick_value_source(
+            pick.round, pick=pick, pick_index=pick_index, timestamp=timestamp
+        )
+        if source.value is not None:
+            total += float(source.value)
+    return total
 
 
 def _context_summary(rollups: dict[str, float], players: list[RosterPlayer]) -> str:
