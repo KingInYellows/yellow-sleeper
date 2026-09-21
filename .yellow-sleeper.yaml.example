@@ -9,6 +9,12 @@ league_format: "14-team SF PPR 0.5 TEP"
 tep_tier: te+
 cache_dir: .cache
 
+# Optional local CSV overlay keyed by sleeper_id (contract source name stays xlsx).
+# Copy .yellow-sleeper-values.csv.example to .yellow-sleeper-values.csv.
+# Unset keeps FantasyCalc only. A configured missing file is an explicit status,
+# not a silent FantasyCalc fallback labeled as overlay.
+# values_overlay_path: .yellow-sleeper-values.csv
+
 # Fictional example policy — replace with your own names. These are not
 # a copied operator untouchable list.
 hard_untouchables:

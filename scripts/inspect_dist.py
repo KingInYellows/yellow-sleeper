@@ -25,7 +25,12 @@ TEXT_SUFFIXES = (".py", ".md", ".txt", ".toml", ".yaml", ".yml", ".json", ".exam
 LICENSE_NOTICE_STEMS = frozenset({"license", "notice", "copying", "authors", "copyright"})
 COPYRIGHT_HOLDER_NEEDLES = frozenset({"Brad Schwarzkopf"})
 PRIVATE_EXACT_NAMES = frozenset(
-    {".env", ".yellow-sleeper.yaml", ".yellow-sleeper.private.yaml"}
+    {
+        ".env",
+        ".yellow-sleeper.yaml",
+        ".yellow-sleeper.private.yaml",
+        ".yellow-sleeper-values.csv",
+    }
 )
 PRIVATE_NAME_GLOBS = (".env.*",)
 

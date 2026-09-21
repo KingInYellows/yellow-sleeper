@@ -42,6 +42,7 @@ from ..models import (
     ResolutionStatus,
     RosterContext,
     RosterPlayer,
+    SourceDisagreement,
     SourceNote,
     TeamRollup,
     ValueMath,
@@ -58,12 +59,19 @@ from .roster import (
     find_roster_id_for_username,
 )
 from .value import (
+    CONTRACT_DISAGREEMENT_PCT,
+    DISABLED_OVERLAY,
+    XLSX_OVERLAY_NOTE,
+    OverlayResult,
+    OverlayStatus,
+    chosen_value_source,
+    merge_player_value,
+    overlay_status_explanation,
     parse_value_records,
     pick_records,
     pick_records_by_name,
     player_value_source,
     resolve_pick_value,
-    source_disagreement,
     valuation_explanation,
     value_source,
     values_by_sleeper_id,
@@ -147,6 +155,7 @@ def get_my_roster_output(
     tep_tier: TepTier = "te+",
     league_format: str | None = None,
     values_timestamp: datetime | None = None,
+    overlay: OverlayResult | None = None,
 ) -> GetMyRosterOutput:
     roster_id = find_roster_id_for_username(snapshot, sleeper_username)
     if roster_id is None:
@@ -173,11 +182,18 @@ def get_my_roster_output(
             age_stats=_age_stats([], []),
         )
     roster = _roster_by_id(snapshot, roster_id)
+    overlay_state = overlay or DISABLED_OVERLAY
     usable_values = _values_for_query(values, league_format, tep_tier)
     value_index = values_by_sleeper_id(usable_values)
     player_ids = roster.get("players") or []
     roster_players = [
-        _roster_player(player_id, players, value_index, timestamp=values_timestamp)
+        _roster_player(
+            player_id,
+            players,
+            value_index,
+            timestamp=values_timestamp,
+            overlay=overlay_state,
+        )
         for player_id in player_ids
         if _player_record(str(player_id), players) is not None
     ]
@@ -194,30 +210,36 @@ def get_my_roster_output(
     ]
     flags = _protected_player_flags(roster_players, policy, ".yellow-sleeper.yaml")
     flags.extend(_value_cache_flags(values_cache_status, values_cache_error))
+    overlay_notes, overlay_flags = _overlay_notes_and_flags(
+        overlay_state, field="grouped_roster[].value", timestamp=values_timestamp
+    )
+    flags.extend(overlay_flags)
     data_status = _with_stale_data_status(
         DataStatus.PARTIAL if missing_values else DataStatus.COMPLETE,
         values_cache_status,
     )
+    source_notes = [
+        _source_note("grouped_roster", "sleeper"),
+        _source_note(
+            "grouped_roster[].value",
+            "fantasycalc",
+            cache_status=values_cache_status,
+            explanation=valuation_explanation(
+                tep_tier,
+                league_format=league_format,
+                cache_error=values_cache_error,
+                pick_rows_present=bool(pick_records(usable_values)),
+            ),
+            timestamp=values_timestamp,
+        ),
+    ]
+    source_notes.extend(overlay_notes)
     return GetMyRosterOutput(
         policy_status=PolicyStatus.OK,
         resolution_status=ResolutionStatus.OK,
         data_status=data_status,
         policy_flags=flags,
-        source_notes=[
-            _source_note("grouped_roster", "sleeper"),
-            _source_note(
-                "grouped_roster[].value",
-                "fantasycalc",
-                cache_status=values_cache_status,
-                explanation=valuation_explanation(
-                    tep_tier,
-                    league_format=league_format,
-                    cache_error=values_cache_error,
-                    pick_rows_present=bool(pick_records(usable_values)),
-                ),
-                timestamp=values_timestamp,
-            ),
-        ],
+        source_notes=source_notes,
         config_sources=config_sources,
         grouped_roster=grouped,
         positional_depth=_positional_depth(roster_players),
@@ -327,7 +349,9 @@ def get_player_value_output(
     tep_tier: TepTier = "te+",
     league_format: str | None = None,
     values_timestamp: datetime | None = None,
+    overlay: OverlayResult | None = None,
 ) -> GetPlayerValueOutput:
+    overlay_state = overlay or DISABLED_OVERLAY
     resolution = resolve_player(player, players)
     fantasycalc_enabled = valuation_source != "xlsx"
     usable_values = (
@@ -337,57 +361,75 @@ def get_player_value_output(
     flags: list[PolicyFlag] = []
     candidates = resolution.candidates if resolution.manual_review else []
     value = None
-    sources = []
-    missing = []
+    sources: list = []
+    missing: list[str] = []
+    disagreement = None
     if resolution.resolved_id:
-        if fantasycalc_enabled:
-            source = player_value_source(
-                resolution.resolved_id, value_index, timestamp=values_timestamp
-            )
-            missing_source = "fantasycalc"
-        else:
-            source = value_source("xlsx", None, timestamp=values_timestamp, enabled=False)
-            missing_source = "xlsx"
-        sources = [source]
-        value = source.value
+        value, sources, disagreement, missing = merge_player_value(
+            resolution.resolved_id,
+            value_index,
+            overlay_state,
+            valuation_source=valuation_source,
+            timestamp=values_timestamp,
+        )
         if value is None:
-            missing.append(missing_source)
             flags.append(_missing_value_flag(player))
+        if disagreement is not None:
+            flags.append(
+                PolicyFlag(
+                    type=FlagType.SOURCE_DISAGREEMENT,
+                    asset=player,
+                    rule_source="computed",
+                    severity=FlagSeverity.INFO,
+                    reason=(
+                        f"Value sources disagree by {disagreement.max_delta_pct}% "
+                        f"(threshold {CONTRACT_DISAGREEMENT_PCT}%)."
+                    ),
+                )
+            )
+    overlay_notes, overlay_flags = _overlay_notes_and_flags(
+        overlay_state, field="value", timestamp=values_timestamp
+    )
+    flags.extend(overlay_flags)
     if fantasycalc_enabled:
         flags.extend(_value_cache_flags(values_cache_status, values_cache_error))
     cache_status = values_cache_status if fantasycalc_enabled else CACHE_STATUS_FRESH
-    source_note_explanation = (
-        valuation_explanation(
-            tep_tier,
-            league_format=league_format,
-            cache_error=values_cache_error,
-            pick_rows_present=bool(pick_records(usable_values)) if fantasycalc_enabled else False,
-        )
-        if fantasycalc_enabled
-        else "XLSX valuation source is not implemented in this preview."
+    primary_source, source_note_explanation = _player_value_provenance(
+        value,
+        sources,
+        overlay=overlay_state,
+        fantasycalc_enabled=fantasycalc_enabled,
+        tep_tier=tep_tier,
+        league_format=league_format,
+        values_cache_error=values_cache_error,
+        pick_rows_present=bool(pick_records(usable_values)) if fantasycalc_enabled else False,
     )
     data_status = _with_stale_data_status(
         _value_data_status(bool(resolution.resolved_id), value is not None),
         cache_status,
     )
+    source_notes = [
+        _source_note(
+            "value",
+            primary_source,
+            cache_status=cache_status,
+            explanation=source_note_explanation,
+            timestamp=values_timestamp,
+        )
+    ]
+    if primary_source != "xlsx":
+        source_notes.extend(overlay_notes)
     return GetPlayerValueOutput(
         policy_status=PolicyStatus.OK,
         resolution_status=_resolution_status([resolution]),
         data_status=data_status,
         policy_flags=flags,
-        source_notes=[
-            _source_note(
-                "value",
-                "fantasycalc" if fantasycalc_enabled else "xlsx",
-                cache_status=cache_status,
-                explanation=source_note_explanation,
-                timestamp=values_timestamp,
-            )
-        ],
+        source_notes=source_notes,
         sleeper_id=resolution.resolved_id,
         name=_resolved_player_name(resolution.resolved_id, players),
         value=value,
         value_sources=sources,
+        source_disagreement=disagreement,
         missing_values=missing,
         candidates=candidates,
     )
@@ -408,7 +450,9 @@ def analyze_trade_pipeline(
     tep_tier: TepTier = "te+",
     league_format: str | None = None,
     values_timestamp: datetime | None = None,
+    overlay: OverlayResult | None = None,
 ) -> AnalyzeTradeOutput:
+    overlay_state = overlay or DISABLED_OVERLAY
     value_records = parse_value_records(_values_for_query(values, league_format, tep_tier))
     value_index = values_by_sleeper_id(value_records)
     pick_index = pick_records_by_name(value_records)
@@ -489,6 +533,7 @@ def analyze_trade_pipeline(
         value_index,
         pick_index,
         timestamp=values_timestamp,
+        overlay=overlay_state,
     )
     flags.extend(_missing_value_flags(missing_assets, band_notes))
     flags.extend(_value_cache_flags(values_cache_status, values_cache_error))
@@ -504,6 +549,10 @@ def analyze_trade_pipeline(
         receive_resolutions,
         inventory,
     )
+    overlay_notes, overlay_flags = _overlay_notes_and_flags(
+        overlay_state, field="value_math", timestamp=values_timestamp
+    )
+    flags.extend(overlay_flags)
     source_notes = [
         _source_note("asset_resolution", "sleeper"),
         _source_note(
@@ -525,6 +574,7 @@ def analyze_trade_pipeline(
         ),
     ]
     source_notes.extend(_pick_band_range_notes(band_notes, values_timestamp))
+    source_notes.extend(overlay_notes)
     return AnalyzeTradeOutput(
         policy_status=PolicyStatus.OK,
         resolution_status=resolution_status,
@@ -549,7 +599,9 @@ def league_power_map_output(
     tep_tier: TepTier = "te+",
     league_format: str | None = None,
     values_timestamp: datetime | None = None,
+    overlay: OverlayResult | None = None,
 ) -> LeaguePowerMapOutput:
+    overlay_state = overlay or DISABLED_OVERLAY
     usable_values = _values_for_query(values, league_format, tep_tier)
     value_index = values_by_sleeper_id(usable_values)
     pick_index = pick_records_by_name(usable_values)
@@ -560,7 +612,11 @@ def league_power_map_output(
     for roster in snapshot["rosters"]:
         roster_players = [
             _roster_player(
-                player_id, players, value_index, timestamp=values_timestamp
+                player_id,
+                players,
+                value_index,
+                timestamp=values_timestamp,
+                overlay=overlay_state,
             )
             for player_id in roster.get("players", [])
             if _player_record(player_id, players) is not None
@@ -613,6 +669,12 @@ def league_power_map_output(
         ),
     ]
     source_notes.extend(_pick_band_range_notes(band_notes, values_timestamp))
+    overlay_notes, overlay_flags = _overlay_notes_and_flags(
+        overlay_state, field="teams[].roster_total", timestamp=values_timestamp
+    )
+    source_notes.extend(overlay_notes)
+    flags = _value_cache_flags(values_cache_status, values_cache_error)
+    flags.extend(overlay_flags)
     return LeaguePowerMapOutput(
         policy_status=PolicyStatus.OK,
         resolution_status=ResolutionStatus.OK,
@@ -620,7 +682,7 @@ def league_power_map_output(
             DataStatus.PARTIAL if missing_any or band_notes else DataStatus.COMPLETE,
             values_cache_status,
         ),
-        policy_flags=_value_cache_flags(values_cache_status, values_cache_error),
+        policy_flags=flags,
         source_notes=source_notes,
         teams=teams,
     )
@@ -687,10 +749,13 @@ def best_player_available_output(
     tep_tier: TepTier = "te+",
     league_format: str | None = None,
     values_timestamp: datetime | None = None,
+    overlay: OverlayResult | None = None,
 ) -> BestPlayerAvailableOutput:
+    overlay_state = overlay or DISABLED_OVERLAY
     drafted = {str(pick.get("player_id")) for pick in draft_state.get("picks", [])}
     usable_values = _values_for_query(values, league_format, tep_tier)
     value_index = values_by_sleeper_id(usable_values)
+    valuation_source = "xlsx" if board_source == "xlsx" else "auto"
     candidates = []
     excluded = 0
     for player_id, raw in players.items():
@@ -707,13 +772,19 @@ def best_player_available_output(
         ):
             excluded += 1
             continue
-        value = value_index.get(str(player_id))
+        chosen, _sources, _disagreement, _missing = merge_player_value(
+            str(player_id),
+            value_index,
+            overlay_state,
+            valuation_source=valuation_source,
+            timestamp=values_timestamp,
+        )
         candidates.append(
             BPACandidate(
                 sleeper_id=str(player_id),
                 name=str(raw.get("full_name") or raw.get("search_full_name")),
                 position=player_position,  # type: ignore[arg-type]
-                value=value.value if value else None,
+                value=chosen,
                 rookie_status=rookie,
                 prior_drafted=prior_drafted,
                 inclusion_reasons=_bpa_reasons(
@@ -725,25 +796,36 @@ def best_player_available_output(
             )
         )
     candidates.sort(key=lambda candidate: candidate.value or 0, reverse=True)
+    overlay_notes, overlay_flags = _overlay_notes_and_flags(
+        overlay_state, field="candidates", timestamp=values_timestamp
+    )
+    flags = _value_cache_flags(values_cache_status, values_cache_error)
+    flags.extend(overlay_flags)
+    source_notes = [
+        _source_note(
+            "candidates",
+            "fantasycalc" if board_source != "xlsx" else "xlsx",
+            cache_status=values_cache_status,
+            explanation=valuation_explanation(
+                tep_tier,
+                league_format=league_format,
+                cache_error=values_cache_error,
+                pick_rows_present=bool(pick_records(usable_values)),
+            )
+            if board_source != "xlsx"
+            else overlay_status_explanation(overlay_state)
+            or "CSV overlay (contract source name xlsx) is not configured.",
+            timestamp=values_timestamp,
+        )
+    ]
+    if board_source != "xlsx":
+        source_notes.extend(overlay_notes)
     return BestPlayerAvailableOutput(
         policy_status=PolicyStatus.OK,
         resolution_status=ResolutionStatus.OK,
         data_status=_with_stale_data_status(DataStatus.COMPLETE, values_cache_status),
-        policy_flags=_value_cache_flags(values_cache_status, values_cache_error),
-        source_notes=[
-            _source_note(
-                "candidates",
-                "fantasycalc",
-                cache_status=values_cache_status,
-                explanation=valuation_explanation(
-                    tep_tier,
-                    league_format=league_format,
-                    cache_error=values_cache_error,
-                    pick_rows_present=bool(pick_records(usable_values)),
-                ),
-                timestamp=values_timestamp,
-            )
-        ],
+        policy_flags=flags,
+        source_notes=source_notes,
         candidates=candidates[:limit],
         excluded_count=excluded,
         board_source=board_source,  # type: ignore[arg-type]
@@ -831,6 +913,71 @@ def _source_note(
     )
 
 
+def _overlay_notes_and_flags(
+    overlay: OverlayResult,
+    *,
+    field: str,
+    timestamp: datetime | None = None,
+) -> tuple[list[SourceNote], list[PolicyFlag]]:
+    explanation = overlay_status_explanation(overlay)
+    if overlay.status == "disabled" or not explanation:
+        return [], []
+    notes = [
+        _source_note(
+            f"{field}.xlsx" if overlay.status == "loaded" else field,
+            "xlsx",
+            explanation=explanation,
+            timestamp=timestamp,
+        )
+    ]
+    flags: list[PolicyFlag] = []
+    if overlay.status in {"missing", "error"}:
+        flags.append(
+            PolicyFlag(
+                type=FlagType.MISSING_VALUE,
+                asset="xlsx",
+                rule_source="computed",
+                severity=FlagSeverity.WARNING,
+                reason=_truncate(explanation),
+            )
+        )
+    return notes, flags
+
+
+def _player_value_provenance(
+    value: float | None,
+    sources: list[Any],
+    *,
+    overlay: OverlayResult,
+    fantasycalc_enabled: bool,
+    tep_tier: TepTier,
+    league_format: str | None,
+    values_cache_error: str | None,
+    pick_rows_present: bool,
+) -> tuple[str, str]:
+    fc_note = valuation_explanation(
+        tep_tier,
+        league_format=league_format,
+        cache_error=values_cache_error,
+        pick_rows_present=pick_rows_present,
+    )
+    overlay_note = overlay_status_explanation(overlay) or XLSX_OVERLAY_NOTE
+    if not fantasycalc_enabled:
+        status = overlay.status
+        if status == "loaded":
+            return "xlsx", overlay_note
+        if status == "missing" or status == "error":
+            return "xlsx", overlay.message or overlay_note
+        if status == "disabled":
+            return "xlsx", "CSV overlay (contract source name xlsx) is not configured."
+        never: OverlayStatus = status
+        raise RuntimeError(f"unhandled overlay status: {never}")
+    primary = chosen_value_source(value, sources)
+    if primary == "xlsx":
+        return "xlsx", overlay_note
+    return "fantasycalc", fc_note
+
+
 def _player_record(player_id: str, players: Mapping[str, Any]) -> Mapping[str, Any] | None:
     raw = players.get(str(player_id))
     return raw if isinstance(raw, Mapping) else None
@@ -849,18 +996,31 @@ def _roster_player(
     value_index: dict[str, FCRecord],
     *,
     timestamp: datetime | None = None,
+    overlay: OverlayResult | None = None,
 ) -> RosterPlayer:
     raw = _player_record(player_id, players) or {}
-    source = player_value_source(str(player_id), value_index, timestamp=timestamp)
+    overlay_state = overlay or DISABLED_OVERLAY
+    if overlay_state.status == "disabled":
+        source = player_value_source(str(player_id), value_index, timestamp=timestamp)
+        sources = [source]
+        value = source.value
+    else:
+        value, sources, _disagreement, _missing = merge_player_value(
+            str(player_id),
+            value_index,
+            overlay_state,
+            valuation_source="auto",
+            timestamp=timestamp,
+        )
     return RosterPlayer(
         sleeper_id=str(player_id),
         name=str(raw.get("full_name") or raw.get("search_full_name") or player_id),
         position=raw.get("position"),  # type: ignore[arg-type]
         team=raw.get("team"),
         age=raw.get("age"),
-        value=source.value,
+        value=value,
         rookie_status=int(raw.get("years_exp") or 0) == 0,
-        value_sources=[source],
+        value_sources=sources,
     )
 
 
@@ -1052,7 +1212,9 @@ def _trade_value_math(
     pick_index: Mapping[str, FCRecord],
     *,
     timestamp: datetime | None = None,
+    overlay: OverlayResult | None = None,
 ) -> tuple[ValueMath, list[str], dict[str, str]]:
+    overlay_state = overlay or DISABLED_OVERLAY
     per_asset = []
     send_total = 0.0
     receive_total = 0.0
@@ -1061,8 +1223,13 @@ def _trade_value_math(
     band_notes: dict[str, str] = {}
     for side, resolutions in [("send", send), ("receive", receive)]:
         for resolution in resolutions:
-            asset_source, band_note = _asset_value_source(
-                resolution, inventory, value_index, pick_index, timestamp=timestamp
+            asset_source, band_note, merged_sources, disagreement = _asset_value_source(
+                resolution,
+                inventory,
+                value_index,
+                pick_index,
+                timestamp=timestamp,
+                overlay=overlay_state,
             )
             value = asset_source.value
             per_asset.append(
@@ -1070,7 +1237,7 @@ def _trade_value_math(
                     "asset": resolution.resolved_id,
                     "side": side,
                     "value": value,
-                    "sources": [asset_source],
+                    "sources": merged_sources,
                 }
             )
             if band_note:
@@ -1082,7 +1249,6 @@ def _trade_value_math(
                 send_total += value
             else:
                 receive_total += value
-            disagreement = source_disagreement([asset_source])
             if disagreement is not None:
                 disagreements.append(disagreement)
     delta = receive_total - send_total
@@ -1107,14 +1273,33 @@ def _asset_value_source(
     pick_index: Mapping[str, FCRecord],
     *,
     timestamp: datetime | None = None,
-) -> tuple[ValueSourceBreakdown, str | None]:
+    overlay: OverlayResult | None = None,
+) -> tuple[ValueSourceBreakdown, str | None, list[ValueSourceBreakdown], SourceDisagreement | None]:
+    overlay_state = overlay or DISABLED_OVERLAY
     if resolution.asset_type == "player" and resolution.resolved_id:
-        return (
-            player_value_source(
-                resolution.resolved_id, value_index, timestamp=timestamp
-            ),
-            None,
+        chosen, sources, disagreement, _missing = merge_player_value(
+            resolution.resolved_id,
+            value_index,
+            overlay_state,
+            valuation_source="auto",
+            timestamp=timestamp,
         )
+        if not sources:
+            sources = [
+                player_value_source(
+                    resolution.resolved_id, value_index, timestamp=timestamp
+                )
+            ]
+        primary_name = chosen_value_source(chosen, sources)
+        primary = next(
+            (source for source in sources if source.source == primary_name),
+            sources[0],
+        )
+        if chosen is not None and primary.value != chosen:
+            primary = value_source(
+                primary_name, chosen, timestamp=primary.timestamp, enabled=True
+            )
+        return primary, None, sources, disagreement
     pick = next(
         (pick for pick in inventory.league_picks if pick.pick_token == resolution.resolved_id),
         None,
@@ -1126,7 +1311,7 @@ def _asset_value_source(
         timestamp=timestamp,
     )
     band_note = resolved.band_range.explanation(pick) if resolved.band_range and pick else None
-    return resolved.source, band_note
+    return resolved.source, band_note, [resolved.source], None
 
 
 def _trade_data_status(

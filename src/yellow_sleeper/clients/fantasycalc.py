@@ -143,10 +143,14 @@ class FantasyCalcClient:
         else:
             self.query_params = {}
 
-    def cache_variant(self) -> str:
+    def cache_variant(self, *, overlay_active: bool = False) -> str:
         if not self.query.supported or not self.query_params:
-            return fantasycalc_cache_variant({"unsupported": "1"})
-        return fantasycalc_cache_variant(self.query_params)
+            return fantasycalc_cache_variant(
+                {"unsupported": "1"}, overlay_active=overlay_active
+            )
+        return fantasycalc_cache_variant(
+            self.query_params, overlay_active=overlay_active
+        )
 
     def supported_profile(self) -> bool:
         return self.query.supported
@@ -170,7 +174,13 @@ class FantasyCalcClient:
         # test_fantasycalc_malformed_response_falls_back_to_stale_cache.
         return [FCRecord.model_validate(record) for record in raw]
 
-    async def get_current_values_cached(self, cache: Cache, *, force: bool = False):
+    async def get_current_values_cached(
+        self,
+        cache: Cache,
+        *,
+        force: bool = False,
+        overlay_active: bool = False,
+    ):
         if not self.query.supported:
             raise UnsupportedValuationQuery(self.query.reasons)
 
@@ -181,7 +191,7 @@ class FantasyCalcClient:
             "fantasycalc_values",
             fetch,
             force=force,
-            variant=self.cache_variant(),
+            variant=self.cache_variant(overlay_active=overlay_active),
         )
 
     async def probe(self) -> LiveProbeResult:

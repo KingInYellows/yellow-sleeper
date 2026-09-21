@@ -9,8 +9,8 @@ This README describes the **v0.2.0 developer prerelease** (current `main`). Sett
 | Surface | Status |
 | --- | --- |
 | `main` | Current installable tree: 11 `dynasty_*` tools, explicit league/user, cache isolation, settings-matched FantasyCalc queries, provider-backed generic PICK rows with labeled static fallback, log redaction, CI |
-| Unmerged PRs `#2` `#3` `#13` `#15` `#16` `#18` | Not on `main`. `#16` ideas (TEP query + cache-by-query-shape + CI skeleton) were **re-implemented here with attribution**, not merged |
-| Future | XLSX overlay, transactions, conditionals, HTTP/OAuth/Docker, multi-user |
+| Unmerged PRs `#2` `#3` `#13` `#15` `#16` `#18` | Not on `main`. `#16` ideas (TEP query + cache-by-query-shape + CI skeleton) were **re-implemented here with attribution**, not merged. Closed `#15` CSV overlay idea is this slice, re-implemented with attribution, not merged |
+| Future | FantasyCalc early/mid/late slot picking, transactions, conditionals, HTTP/OAuth/Docker, multi-user |
 
 **Non-goals:** HTTP hosting, OAuth, Docker, transaction tools, workbook import, conditional-trade engine, multi-user, live API tests, Graphite submit.
 
@@ -77,7 +77,7 @@ Required before any league-scoped Sleeper request:
 
 There is **no** silent first-roster or username fallback.
 
-**Static keys** (league id, username, format, cache dir, tep tier): YAML > environment.
+**Static keys** (league id, username, format, cache dir, tep tier, overlay path): YAML > environment.
 
 **Policy lists** (untouchables / protected players / pick patterns): tool override > YAML > environment.
 
@@ -88,6 +88,7 @@ There is **no** silent first-roster or username fallback.
 | `league_format` | `LEAGUE_FORMAT` |
 | `cache_dir` | `CACHE_DIR` |
 | `tep_tier` | `YELLOW_SLEEPER_TEP_TIER` (`off` / `te+` / `te++`) |
+| `values_overlay_path` | `YELLOW_SLEEPER_VALUES_OVERLAY_PATH` (CSV keyed by `sleeper_id`; contract source name `xlsx`) |
 | `hard_untouchables` | `YELLOW_SLEEPER_HARD_UNTOUCHABLES` (comma-separated) |
 | config path | `YELLOW_SLEEPER_CONFIG` (default `.yellow-sleeper.yaml`) |
 
@@ -131,7 +132,7 @@ Derived from `src/yellow_sleeper/tools/` on this branch:
 3. `dynasty_find_roster` — fuzzy roster search
 4. `dynasty_list_traded_picks` — league traded-pick market (owner roster via username helper)
 5. `dynasty_list_my_picks` — native + traded-in (optional traded-away)
-6. `dynasty_get_player_value` — FantasyCalc lookup; xlsx source is unimplemented
+6. `dynasty_get_player_value` — FantasyCalc lookup; optional CSV overlay (`xlsx`) wins when configured
 7. `dynasty_analyze_trade` — resolution, guardrails, value math, roster context
 8. `dynasty_league_power_map` — per-team rollups
 9. `dynasty_whats_on_the_clock` — draft clock / recent picks
@@ -153,12 +154,13 @@ Cache files live under `cache_dir` (default `.cache/`):
 - `sleeper_players_nfl.json.gz` — global player dictionary
 - `league_snapshot__<league_id>.json` — one file per league
 - `draft_state__<draft_id>__league-<league_id>.json` — draft + league scope
-- `fantasycalc_values__v1__<sorted-query>.json` — one board per query shape
+- `fantasycalc_values__v1__<sorted-query>.json` — one board per query shape (no overlay)
+- `fantasycalc_values__v1__<sorted-query>__overlay-on.json` — same query with overlay active; a no-overlay board cannot satisfy an overlay query
 - `logs/server.log` — JSON logs (gitignored)
 
 Legacy unscoped `league_snapshot.json` / `fantasycalc_values.json` / `draft_state.json` are **never** reused for scoped reads. Switching leagues or TEP tiers in one cache directory cannot satisfy the other identity.
 
-Do not commit `.env`, `.yellow-sleeper.yaml`, caches, or logs. The example YAML is synthetic.
+Do not commit `.env`, `.yellow-sleeper.yaml`, `.yellow-sleeper-values.csv`, caches, or logs. The example YAML and CSV are synthetic.
 
 **Logging:** the `yellow_sleeper` logger redacts configured league id / username (length ≥ 4), matching extra keys, formatted messages, args, exception text, and `/league/<id>` URL path segments. Residual limits: root/`httpx` loggers, process listings, Cursor MCP UI, and MCP **tool JSON** (league data is the product and is not redacted).
 
@@ -176,8 +178,9 @@ Do not commit `.env`, `.yellow-sleeper.yaml`, caches, or logs. The example YAML 
 
 ## Limitations
 
-- When a generic `{season} {ordinal}` FantasyCalc PICK row is missing but Early/Mid/Late band rows exist, the single-number field stays empty and provenance reports the low/high range plus band labels (`PARTIAL`). Static R1=3000 is fallback only when neither generic nor band rows exist. No projected_slot, CSV/xlsx overlay, or conditional-trade engine.
-- XLSX overlay, conditionals, transactions, HTTP MCP, OAuth, Docker: out of scope.
+- When a generic `{season} {ordinal}` FantasyCalc PICK row is missing but Early/Mid/Late band rows exist, the single-number field stays empty and provenance reports the low/high range plus band labels (`PARTIAL`). Static R1=3000 is fallback only when neither generic nor band rows exist. No projected_slot or conditional-trade engine.
+- Optional local CSV overlay (`values_overlay_path`) is keyed by Sleeper player id. Contract source name stays `xlsx`. Overlay wins over FantasyCalc when the file loads. A missing configured file is an explicit status, not a silent FantasyCalc fallback labeled as overlay. Unset path keeps FantasyCalc-only.
+- Conditionals, transactions, HTTP MCP, OAuth, Docker: out of scope.
 - MIT covers code and synthetic fixtures only; Sleeper/FantasyCalc commercial and redistribution rights stay a limitation (`NOTICE`).
 - GitHub org `KingInYellows` does not currently enable private vulnerability reporting.
 

@@ -107,7 +107,7 @@ Preview candidate verification is recorded in the section below; re-run those co
 ## Known Gaps
 
 Spec deferrals:
-- XLSX value overlay is not implemented.
+- Optional CSV value overlay (`source=xlsx`) is implemented; a missing configured file is explicit, default unset path is FantasyCalc-only.
 - TEP-aware value adjustment is not implemented as a local multiplier; FantasyCalc discrete `tep` enums are used when the format maps.
 - Conditional trades and pick swaps are not implemented beyond unresolved/clarification behavior.
 - Multi-user support, public HTTP transport, Docker packaging, OAuth, and live Sleeper notifications are not implemented.

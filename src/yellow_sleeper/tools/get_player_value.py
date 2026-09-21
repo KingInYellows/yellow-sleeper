@@ -15,6 +15,7 @@ async def dynasty_get_player_value(
     """Return a player's value with source and resolution details."""
     runtime = await get_runtime()
     players, _ = await runtime.players()
+    overlay = runtime.overlay_result()
     values_timestamp = None
     if valuation_source == "xlsx":
         values = []
@@ -36,5 +37,6 @@ async def dynasty_get_player_value(
         tep_tier=runtime.config.static.tep_tier,
         league_format=runtime.config.static.league_format,
         values_timestamp=values_timestamp,
+        overlay=overlay,
     )
     return output.model_dump(mode="json")

@@ -21,6 +21,8 @@ logs/
 .yellow-sleeper.yaml
 !.yellow-sleeper.yaml.example
 .yellow-sleeper.private.yaml
+.yellow-sleeper-values.csv
+!.yellow-sleeper-values.csv.example
 *.overlay.csv
 *.overlay.xlsx
 *.overlay.json

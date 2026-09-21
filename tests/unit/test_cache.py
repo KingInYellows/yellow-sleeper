@@ -144,3 +144,20 @@ async def test_scoped_reads_never_use_legacy_unscoped_files(tmp_path: Path) -> N
     assert result.data == {"league": "fresh-identity"}
     assert result.path == tmp_path / f"league_snapshot__{variant}.json"
     assert cache.read("league_snapshot", variant=variant) != {"league": {"legacy": True}}
+
+
+@pytest.mark.asyncio
+async def test_valuation_cache_isolates_overlay_active_from_no_overlay(tmp_path: Path) -> None:
+    cache = Cache(tmp_path)
+    params = build_query_params("te+")
+    no_overlay = fantasycalc_cache_variant(params)
+    overlay_on = fantasycalc_cache_variant(params, overlay_active=True)
+    await cache.write("fantasycalc_values", [{"overlay": False}], variant=no_overlay)
+
+    assert no_overlay != overlay_on
+    assert "overlay-on" not in no_overlay
+    assert "overlay-on" in overlay_on
+    assert cache.read("fantasycalc_values", variant=no_overlay) == [{"overlay": False}]
+    with pytest.raises(FileNotFoundError):
+        cache.read("fantasycalc_values", variant=overlay_on)
+    assert cache.status("fantasycalc_values", variant=overlay_on) == "missing"
