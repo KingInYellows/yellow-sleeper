@@ -293,3 +293,27 @@ What's next:
 Blockers:
 - Commercial/redistribution rights for Sleeper and FantasyCalc payloads remain an explicit limitation (`NOTICE`), not a grant.
 
+## 2026-09-21 — Conditional, OR, and pick-swap ranges
+
+Current milestone: conditional/swap ranges on `cursor/conditional-swap-ranges-f829` (draft PR).
+
+What was just completed:
+- Conditional (`if` / `unless` / `when` / `whenever` / `conditional`), exclusive-OR (`or`), and pick-swap (`swap` / `pick swap`) language does not get one invented `delta`.
+- `dynasty_analyze_trade` returns `PARTIAL` + `NEEDS_CLARIFICATION` with `conditional_or_swap_trade`, plus `candidates` and/or `delta_min` / `delta_max`.
+- A normal trade still returns one `delta`. No write tools or trade submission.
+- Re-implements the reviewed range idea from closed PR #15 with attribution; does not merge that branch. Base is overlay merge `68d3ddef`. Tag `v0.2.0` stays on `617427ff`.
+
+Validation commands run:
+- `uv lock --check` — passed (exit 0).
+- `uv run ruff check src tests scripts` — passed (exit 0).
+- `uv run python -m pytest tests/ -q` — passed, **147 tests** collected and passed (exit 0). No live Sleeper/FantasyCalc HTTP.
+- `HTTP(S)_PROXY=http://127.0.0.1:1 HTTPS_PROXY=http://127.0.0.1:1 uv run python -m pytest tests/ -q` — passed, **147 tests** (exit 0).
+- `uv build && uv run python scripts/inspect_dist.py` — passed (exit 0).
+- `uv run yellow-sleeper --help` — passed without identity (exit 0).
+
+What's next:
+- Coordinator/owner review of draft PR. Stay draft.
+
+Blockers:
+- Commercial/redistribution rights for Sleeper and FantasyCalc payloads remain an explicit limitation (`NOTICE`), not a grant.
+
