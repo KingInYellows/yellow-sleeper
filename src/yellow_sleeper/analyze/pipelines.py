@@ -1164,18 +1164,22 @@ def _resolve_or_asset(
     season: int,
 ) -> AssetResolution:
     candidates: list[Candidate] = []
-    asset_type: str = "player"
+    saw_player = False
+    saw_pick = False
     seen: set[str] = set()
     for part in parts[:5]:
         resolution = _resolve_plain_asset(part, side, inventory, players, season)
         if resolution.asset_type == "pick":
-            asset_type = "pick"
+            saw_pick = True
+        else:
+            saw_player = True
         for candidate in _candidates_from_resolution(resolution, players):
             key = candidate.sleeper_id or candidate.pick_token or candidate.name
             if key in seen:
                 continue
             seen.add(key)
             candidates.append(candidate)
+    asset_type = "player" if saw_player or not saw_pick else "pick"
     return AssetResolution(
         input=original,
         asset_type=asset_type,  # type: ignore[arg-type]
@@ -1274,15 +1278,18 @@ def _blocking_rules(
 ) -> list[BlockingRule]:
     rules: list[BlockingRule] = []
     for raw, resolution in zip(send_assets, send_resolutions, strict=True):
-        if resolution.asset_type != "player":
-            continue
-        names = []
-        resolved_name = _resolved_player_name(resolution.resolved_id, players)
-        if resolved_name:
-            names.append(resolved_name)
-        else:
-            names.append(raw)
-        names.extend(candidate.name for candidate in resolution.candidates if candidate.name)
+        names: list[str] = []
+        if resolution.asset_type == "player":
+            resolved_name = _resolved_player_name(resolution.resolved_id, players)
+            if resolved_name:
+                names.append(resolved_name)
+            else:
+                names.append(raw)
+        names.extend(
+            candidate.name
+            for candidate in resolution.candidates
+            if candidate.name and candidate.sleeper_id
+        )
         for display in names:
             for untouchable in policy.hard_untouchables:
                 score = int(round(fuzz.WRatio(display, untouchable)))

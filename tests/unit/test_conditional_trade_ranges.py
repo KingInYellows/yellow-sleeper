@@ -145,3 +145,20 @@ def test_conditional_hard_untouchable_still_blocks(sleeper_snapshot: dict) -> No
     assert result.policy_status == PolicyStatus.BLOCKED
     assert result.value_math is None
     assert result.blocking_rules[0].asset == "Drake London"
+
+
+def test_mixed_or_hard_untouchable_player_still_blocks(sleeper_snapshot: dict) -> None:
+    result = _trade(
+        sleeper_snapshot,
+        ["Drake London or 2027 1st"],
+        ["Bijan Robinson"],
+        policy=DynamicPolicy(hard_untouchables=["Drake London"]),
+    )
+
+    mixed = next(res for res in result.asset_resolution if " or " in res.input.lower())
+    assert any(candidate.sleeper_id == "9745" for candidate in mixed.candidates)
+    assert any(candidate.pick_token for candidate in mixed.candidates)
+    assert result.policy_status == PolicyStatus.BLOCKED
+    assert result.value_math is None
+    assert any(rule.matched_against == "Drake London" for rule in result.blocking_rules)
+    assert any("Drake London" in rule.asset for rule in result.blocking_rules)
