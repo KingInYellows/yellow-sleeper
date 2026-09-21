@@ -113,3 +113,21 @@ This re-implements the reviewed CSV overlay idea from closed PR #15 (`cursor/sta
 Alternatives considered: merge #15; ship real `.xlsx` via openpyxl; treat a missing file as an empty map and keep using FantasyCalc under an overlay label (as in #15); rename the contract literal from `xlsx` to `csv`; put `overlay-off` on the default cache token.
 
 Why this one: smallest honest overlay that keeps the existing contract name, keeps the default cache path unchanged, and refuses to mislabel FantasyCalc as a local sheet.
+
+## 2026-09-21 — Conditional, OR, and pick-swap trades are ranges, not one value
+
+Decision: `dynasty_analyze_trade` treats **conditional**, **exclusive-OR**, and **pick-swap** language as unresolved scenarios. Those inputs do **not** get one invented `value_math.delta`. The response is `data_status=PARTIAL` and `resolution_status=NEEDS_CLARIFICATION`, with a `conditional_or_swap_trade` flag, plus either `asset_resolution[].candidates` or `value_math.delta_min` / `delta_max` (both when they diverge). Point fields `delta` / `delta_pct` / package totals stay null on that path. A normal trade (no such language) still returns one `delta` and leaves `delta_min` / `delta_max` null.
+
+Detection (word boundaries, case-insensitive):
+
+- Conditional: `if` / `unless` / `when` / `whenever` / `conditional`. Strip the trailing clause so the base asset can still resolve. Range is include-the-asset vs omit-it (trigger did not fire).
+- Exclusive-OR: a whole-word `or` with a non-empty phrase on each side. Do not pick a winner. Resolve each side into `candidates`.
+- Pick-swap: `swap` / `pick swap`. Strip that token (and a trailing `s` on `1sts` / `2nds`) before pick parse. Matching multiple owned picks stays `candidates`.
+
+Do **not** use FantasyCalc Early/Mid/Late bands as the swap range (that PARTIAL path already exists). No write tools, no trade submission, no personal workbook, no live league identity. Tests stay fixture-only.
+
+This re-implements the reviewed conditional-range idea from closed PR #15 (`cursor/stage2-value-accuracy-be01`, head `5139502`) with attribution. It does not reopen or merge #15. Divergence from that review: no point `delta` alongside the range; OR language is first-class; swap also gets clarification, not a silent single number.
+
+Alternatives considered: merge #15’s overlay/banded/conditional stack; keep returning one condition-true `delta` plus min/max (as in #15); leave swap as flag-only without clarification; fuzzy-resolve “A or B” to the higher WRatio name.
+
+Why this one: one number for an unverified trigger, alternative, or swap is a lie. A range or a candidate list plus clarification matches the existing envelope without adding a trade-submission engine.
