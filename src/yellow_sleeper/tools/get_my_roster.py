@@ -13,6 +13,7 @@ async def dynasty_get_my_roster() -> dict:
     snapshot, _ = await runtime.snapshot()
     players, _ = await runtime.players()
     values_result = await runtime.values_result()
+    overlay = runtime.overlay_result()
     output = get_my_roster_output(
         snapshot=snapshot,
         players=players,
@@ -25,5 +26,6 @@ async def dynasty_get_my_roster() -> dict:
         tep_tier=runtime.config.static.tep_tier,
         league_format=runtime.config.static.league_format,
         values_timestamp=values_result.source_timestamp(),
+        overlay=overlay,
     )
     return output.model_dump(mode="json")

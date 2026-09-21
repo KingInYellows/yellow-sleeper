@@ -45,9 +45,16 @@ def draft_cache_variant(draft_id: str, league_id: str) -> str:
     return safe_cache_token(f"{draft_id}__league-{league_id}")
 
 
-def fantasycalc_cache_variant(query_params: dict[str, str]) -> str:
+def fantasycalc_cache_variant(
+    query_params: dict[str, str],
+    *,
+    overlay_active: bool = False,
+) -> str:
     encoded = "_".join(f"{key}-{query_params[key]}" for key in sorted(query_params))
-    return safe_cache_token(f"{VALUES_CACHE_SCHEMA}__{encoded}")
+    token = f"{VALUES_CACHE_SCHEMA}__{encoded}"
+    if overlay_active:
+        token = f"{token}__overlay-on"
+    return safe_cache_token(token)
 
 
 def cache_path(

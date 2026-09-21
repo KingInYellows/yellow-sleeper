@@ -123,3 +123,27 @@ def test_explicit_identity_is_required_and_accepted(tmp_path: Path) -> None:
     assert config.has_identity() is True
     config.require_identity()
     assert config.static_sources == ["env"]
+
+
+def test_config_overlay_path_from_env(tmp_path: Path) -> None:
+    overlay = tmp_path / "vals.csv"
+    config = load_config(
+        env={
+            "YELLOW_SLEEPER_VALUES_OVERLAY_PATH": str(overlay),
+            "CACHE_DIR": str(tmp_path),
+        },
+        config_path=tmp_path / "missing.yaml",
+    )
+    assert config.static.values_overlay_path == overlay
+
+
+def test_config_overlay_path_yaml_over_env(tmp_path: Path) -> None:
+    yaml_overlay = tmp_path / "yaml.csv"
+    env_overlay = tmp_path / "env.csv"
+    config_path = tmp_path / ".yellow-sleeper.yaml"
+    config_path.write_text(f"values_overlay_path: {yaml_overlay}\n", encoding="utf-8")
+    config = load_config(
+        env={"YELLOW_SLEEPER_VALUES_OVERLAY_PATH": str(env_overlay)},
+        config_path=config_path,
+    )
+    assert config.static.values_overlay_path == yaml_overlay

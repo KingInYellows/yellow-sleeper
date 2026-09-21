@@ -37,12 +37,22 @@ class StaticConfig(BaseModel):
     league_format: str = "14-team SF PPR 0.5 TEP"
     cache_dir: Path = Path(".cache")
     tep_tier: TepTier = "te+"
+    values_overlay_path: Path | None = None
 
     @field_validator("sleeper_league_id", "sleeper_username", "league_format", mode="before")
     @classmethod
     def _strip_text(cls, value: Any) -> Any:
         if isinstance(value, str):
             return value.strip()
+        return value
+
+    @field_validator("values_overlay_path", mode="before")
+    @classmethod
+    def _empty_overlay_path(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
         return value
 
 
@@ -196,6 +206,7 @@ def _load_static_config(
         "league_format": "league_format",
         "cache_dir": "cache_dir",
         "tep_tier": "tep_tier",
+        "values_overlay_path": "values_overlay_path",
     }
     for yaml_key, model_key in yaml_keys.items():
         if yaml_key in yaml_data:
@@ -209,6 +220,7 @@ def _load_static_config(
         "LEAGUE_FORMAT": "league_format",
         "CACHE_DIR": "cache_dir",
         "YELLOW_SLEEPER_TEP_TIER": "tep_tier",
+        "YELLOW_SLEEPER_VALUES_OVERLAY_PATH": "values_overlay_path",
     }
     for env_key, model_key in env_keys.items():
         if model_key not in values and env_key in env:

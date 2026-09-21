@@ -118,3 +118,19 @@ def test_smoke_6_best_player_available_excludes_drafted_rookies() -> None:
         "not_already_drafted:true" in candidate.inclusion_reasons
         for candidate in result.candidates
     )
+
+
+def test_smoke_overlay_synthetic_row_overrides_fantasycalc() -> None:
+    from yellow_sleeper.analyze.pipelines import get_player_value_output
+    from yellow_sleeper.analyze.value import OverlayResult
+
+    result = get_player_value_output(
+        player="Harold Fannin",
+        players=load_fixture("sleeper/players_nfl.json"),
+        values=load_fixture("fantasycalc/values_current.json"),
+        overlay=OverlayResult(status="loaded", values={"9991": 5000.0}),
+        league_format="14-team SF PPR 0.5 TEP",
+    )
+    assert result.value == 5000
+    assert result.source_notes[0].source == "xlsx"
+    assert result.source_disagreement is not None

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import csv
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
 from ..clients.fantasycalc import (
     PICK_PROVIDER_EXPLANATION,
@@ -26,6 +28,13 @@ _ROUND_ORDINAL = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th", 5: "5th"}
 _BAND_LABELS = ("Early", "Mid", "Late")
 
 CONTRACT_DISAGREEMENT_PCT = 25.0
+
+OverlayStatus = Literal["disabled", "loaded", "missing", "error"]
+
+XLSX_OVERLAY_NOTE = (
+    "Local CSV overlay (contract source name xlsx); overlay wins over FantasyCalc "
+    "when configured."
+)
 
 
 @dataclass(frozen=True)
@@ -50,6 +59,23 @@ class PickBandRange:
 class ResolvedPickValue:
     source: ValueSourceBreakdown
     band_range: PickBandRange | None = None
+
+
+@dataclass(frozen=True)
+class OverlayResult:
+    """Local CSV overlay keyed by Sleeper player id (contract source name xlsx)."""
+
+    status: OverlayStatus
+    values: dict[str, float] = field(default_factory=dict)
+    path: Path | None = None
+    message: str | None = None
+
+    @property
+    def active(self) -> bool:
+        return self.status == "loaded"
+
+
+DISABLED_OVERLAY = OverlayResult(status="disabled")
 
 
 def parse_value_records(records: Iterable[FCRecord | Mapping[str, Any]]) -> list[FCRecord]:
@@ -236,3 +262,150 @@ def valuation_explanation(
     if cache_error:
         parts.insert(0, cache_error)
     return " ".join(parts)
+
+
+def load_overlay_values(path: Path | None) -> OverlayResult:
+    """Load a sleeper_id,value CSV overlay.
+
+    Missing/unreadable configured paths are explicit statuses, not an empty
+    map silently labeled as overlay. Unset path stays disabled.
+    Re-implements the reviewed CSV overlay idea from PR #15 with attribution.
+    """
+    if path is None:
+        return OverlayResult(status="disabled")
+    overlay_path = Path(path)
+    if not overlay_path.is_file():
+        return OverlayResult(
+            status="missing",
+            path=overlay_path,
+            message=(
+                f"Configured CSV overlay path does not exist: {overlay_path}. "
+                "FantasyCalc was not labeled as overlay."
+            ),
+        )
+    try:
+        values: dict[str, float] = {}
+        with overlay_path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                sleeper_id = (row.get("sleeper_id") or "").strip()
+                raw_value = (row.get("value") or "").strip()
+                if not sleeper_id or not raw_value:
+                    continue
+                try:
+                    values[sleeper_id] = float(raw_value)
+                except ValueError:
+                    continue
+        return OverlayResult(status="loaded", values=values, path=overlay_path)
+    except OSError as exc:
+        return OverlayResult(
+            status="error",
+            path=overlay_path,
+            message=(
+                f"Configured CSV overlay could not be read: {overlay_path} ({exc}). "
+                "FantasyCalc was not labeled as overlay."
+            ),
+        )
+
+
+def overlay_status_explanation(overlay: OverlayResult) -> str | None:
+    status = overlay.status
+    if status == "disabled":
+        return None
+    if status == "loaded":
+        count = len(overlay.values)
+        return (
+            f"CSV overlay active for {count} sleeper_id(s) "
+            "(contract source name xlsx); overlay wins over FantasyCalc."
+        )
+    if status == "missing" or status == "error":
+        return overlay.message
+    never: OverlayStatus = status
+    raise RuntimeError(f"unhandled overlay status: {never}")
+
+
+def merge_player_value(
+    sleeper_id: str,
+    value_index: dict[str, FCRecord],
+    overlay: OverlayResult | Mapping[str, float],
+    *,
+    valuation_source: str = "auto",
+    timestamp: datetime | None = None,
+    disagreement_pct: float = CONTRACT_DISAGREEMENT_PCT,
+) -> tuple[float | None, list[ValueSourceBreakdown], SourceDisagreement | None, list[str]]:
+    """Merge FantasyCalc and CSV overlay for one player.
+
+    Contract source name ``xlsx`` means the local overlay file (CSV). Overlay
+    wins when both sources have a number. Re-implements the reviewed merge
+    from PR #15 with attribution; blend/fc_wins are not implemented.
+    """
+    now = timestamp or datetime.now(UTC)
+    overlay_state = (
+        overlay
+        if isinstance(overlay, OverlayResult)
+        else OverlayResult(status="loaded", values=dict(overlay))
+    )
+    overlay_map = dict(overlay_state.values)
+    fc_enabled = valuation_source != "xlsx"
+    overlay_requested = valuation_source != "fantasycalc"
+    overlay_usable = overlay_requested and overlay_state.status == "loaded"
+    overlay_failed = overlay_requested and overlay_state.status in {"missing", "error"}
+
+    sources: list[ValueSourceBreakdown] = []
+    missing: list[str] = []
+
+    fc_value = None
+    if fc_enabled:
+        fc_source = player_value_source(sleeper_id, value_index, timestamp=now)
+        sources.append(fc_source)
+        fc_value = fc_source.value
+        if fc_value is None:
+            missing.append("fantasycalc")
+
+    overlay_value = None
+    if overlay_usable:
+        if sleeper_id in overlay_map:
+            overlay_value = float(overlay_map[sleeper_id])
+            sources.append(value_source("xlsx", overlay_value, timestamp=now, enabled=True))
+        else:
+            sources.append(value_source("xlsx", None, timestamp=now, enabled=True))
+            if valuation_source == "xlsx":
+                missing.append("xlsx")
+    elif overlay_failed or valuation_source == "xlsx":
+        sources.append(value_source("xlsx", None, timestamp=now, enabled=False))
+        if valuation_source == "xlsx":
+            missing.append("xlsx")
+
+    disagreement = source_disagreement(sources, threshold_pct=disagreement_pct)
+
+    if valuation_source == "xlsx":
+        chosen = overlay_value
+    elif valuation_source == "fantasycalc" or overlay_value is None:
+        chosen = fc_value
+    else:
+        chosen = overlay_value
+
+    return chosen, sources, disagreement, missing
+
+
+def chosen_value_source(
+    chosen: float | None,
+    sources: list[ValueSourceBreakdown],
+) -> str:
+    """Name the source that supplied the chosen number."""
+    if chosen is None:
+        for source in sources:
+            if source.enabled:
+                return source.source
+        return sources[0].source if sources else "fantasycalc"
+    matching = [
+        source
+        for source in sources
+        if source.enabled and source.value is not None and float(source.value) == float(chosen)
+    ]
+    for source in matching:
+        if source.source == "xlsx":
+            return "xlsx"
+    if matching:
+        return matching[0].source
+    return sources[0].source if sources else "fantasycalc"

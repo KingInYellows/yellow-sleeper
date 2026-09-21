@@ -18,6 +18,7 @@ async def dynasty_best_player_available(
     runtime = await get_runtime()
     players, _ = await runtime.players()
     values_result = await runtime.values_result()
+    overlay = runtime.overlay_result()
     draft_state, _ = await runtime.draft_state(draft_id)
     output = best_player_available_output(
         players=players,
@@ -31,5 +32,6 @@ async def dynasty_best_player_available(
         tep_tier=runtime.config.static.tep_tier,
         league_format=runtime.config.static.league_format,
         values_timestamp=values_result.source_timestamp(),
+        overlay=overlay,
     )
     return output.model_dump(mode="json")

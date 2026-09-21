@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 
+from .analyze.value import OverlayResult, load_overlay_values
 from .clients import (
     FantasyCalcClient,
     SleeperClient,
@@ -48,9 +49,17 @@ class Runtime:
         result = await self.values_result(force=force)
         return result.data, result.status
 
+    def overlay_result(self) -> OverlayResult:
+        return load_overlay_values(self.config.static.values_overlay_path)
+
     async def values_result(self, *, force: bool = False) -> CacheReadResult:
+        overlay = self.overlay_result()
         try:
-            return await self.fantasycalc.get_current_values_cached(self.cache, force=force)
+            return await self.fantasycalc.get_current_values_cached(
+                self.cache,
+                force=force,
+                overlay_active=overlay.active,
+            )
         except UnsupportedValuationQuery as exc:
             return CacheReadResult(data=[], status="cached", error=exc)
 
@@ -118,7 +127,11 @@ class Runtime:
         return prior, post, refreshed, failures
 
     def cache_statuses(self) -> dict[str, str]:
-        variants: dict[str, str] = {"fantasycalc_values": self.fantasycalc.cache_variant()}
+        variants: dict[str, str] = {
+            "fantasycalc_values": self.fantasycalc.cache_variant(
+                overlay_active=self.overlay_result().active
+            )
+        }
         if self.config.has_identity():
             league_id = self.config.static.sleeper_league_id
             variants["league_snapshot"] = league_cache_variant(league_id)

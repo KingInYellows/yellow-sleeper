@@ -269,3 +269,27 @@ What's next:
 Blockers:
 - Commercial/redistribution rights for Sleeper and FantasyCalc payloads remain an explicit limitation (`NOTICE`), not a grant.
 
+## 2026-09-21 — Local CSV value overlay
+
+Current milestone: CSV overlay on `cursor/csv-value-overlay-90b8` (draft PR).
+
+What was just completed:
+- Optional `values_overlay_path` CSV keyed by Sleeper player id. Contract source name stays `xlsx`. Overlay wins over FantasyCalc when the file loads.
+- Missing configured file is an explicit status, not a crash and not a silent FantasyCalc fallback labeled as overlay.
+- Cache identity includes `overlay-on` only when the overlay is active. Default unset path is unchanged.
+- Re-implements the reviewed overlay idea from closed PR #15 with attribution; does not merge that branch.
+
+Validation commands run:
+- `uv lock --check` — passed (exit 0).
+- `uv run ruff check src tests scripts` — passed (exit 0).
+- `uv run python -m pytest tests/ -q` — passed, **139 tests** collected and passed (exit 0). No live Sleeper/FantasyCalc HTTP.
+- `HTTP(S)_PROXY=http://127.0.0.1:1 uv run python -m pytest tests/ -q` — passed, **139 tests** (exit 0).
+- `uv build && uv run python scripts/inspect_dist.py` — passed (exit 0).
+- `uv run yellow-sleeper --help` — passed without identity (exit 0).
+
+What's next:
+- Coordinator/owner review of draft PR. Stay draft.
+
+Blockers:
+- Commercial/redistribution rights for Sleeper and FantasyCalc payloads remain an explicit limitation (`NOTICE`), not a grant.
+

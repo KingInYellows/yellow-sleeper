@@ -103,3 +103,13 @@ Why this one: the public enum includes `none`, so supported non-TEP queries shou
 ## 2026-09-21 — First public tag is v0.2.0
 
 The first public tag is `v0.2.0` (developer prerelease of current `main`), not a silent tag of unpublished `0.1.0`.
+
+## 2026-09-21 — Local CSV value overlay (contract source name `xlsx`)
+
+Decision: optional local CSV keyed by Sleeper player id overrides FantasyCalc when configured (`overlay_wins`). The tool-contract source name stays `xlsx`; the on-disk format is CSV (no openpyxl). A configured path whose file is missing is an explicit status (flag + provenance), not a crash and not a silent FantasyCalc fallback labeled as overlay. Default (no `values_overlay_path`) stays FantasyCalc-only. Disagreement above the existing 25% threshold remains a `source_disagreement` flag. Provenance names which source supplied the chosen number. FantasyCalc cache identity includes whether the overlay is active (`overlay-on`), so a no-overlay board cannot satisfy an overlay query. Tests and the tracked example file are synthetic only.
+
+This re-implements the reviewed CSV overlay idea from closed PR #15 (`cursor/stage2-value-accuracy-be01`, head `5139502`) with attribution. It does not reopen, cherry-pick, or merge that branch (no conditionals, no pick-swap ranges, no personal workbook, no live league export).
+
+Alternatives considered: merge #15; ship real `.xlsx` via openpyxl; treat a missing file as an empty map and keep using FantasyCalc under an overlay label (as in #15); rename the contract literal from `xlsx` to `csv`; put `overlay-off` on the default cache token.
+
+Why this one: smallest honest overlay that keeps the existing contract name, keeps the default cache path unchanged, and refuses to mislabel FantasyCalc as a local sheet.
