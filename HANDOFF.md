@@ -180,3 +180,12 @@ uv run yellow-sleeper --help
 
 The run on this head passed with **120 tests** (exit 0 on every command above). Stdio MCP smoke remains in `tests/smoke/test_mcp_stdio.py`.
 
+## Valuation residuals (2026-09-21)
+
+Branch: `agent/valuation-residuals`. Draft PR only. Does not merge `#13` `#15` `#16` `#18` `#2` `#3`.
+
+- Supported non-TEP FantasyCalc queries send documented `tep=none` (bare `tep=` errors; the key is not omitted). Default 14-team SF full-PPR 0.5 TEP still sends `tep=te+`; `te++` stays as already supported.
+- Generic `{season} {ordinal}` PICK rows remain a single value. Early/Mid/Late-only rows are an explicit low/high range plus `PARTIAL`, not a fabricated slot. Static R1=3000 is fallback only when neither generic nor band rows exist.
+
+The run on this head passed with **124 tests** (exit 0 on every command above). Stdio MCP smoke remains in `tests/smoke/test_mcp_stdio.py`.
+

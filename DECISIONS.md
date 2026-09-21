@@ -87,3 +87,15 @@ This re-implements the reviewed generic-row pick match from PR #15 (`cursor/stag
 Alternatives considered: keep the pinned 14-team SF PPR `te+` query for every format and label approximations; merge #15’s overlay/banded/conditional stack; send `tep=none` instead of omitting.
 
 Why this one: smallest honest step that makes the query follow settings the public API actually documents, and that uses provider pick rows when they are in the payload.
+
+## 2026-09-21 — `tep=none` and Early/Mid/Late pick ranges
+
+Decision: for a resolved **supported** non-TEP FantasyCalc query, send the documented literal `tep=none`. Keep `tep=te+` on the default 14-team Superflex full-PPR 0.5 TEP path and `tep=te++` where that discrete tier is already supported. Do not invent multipliers. Official FantasyCalc API docs list `tep` as `none` / `te+` / `te++`. A bare `tep=` has historically errored; omitting the key matched the documented default until now, but `none` is the valid explicit value, so send `none`. Internal config still uses `tep_tier=off`; only the HTTP param is `none`. Cache variants follow the params actually sent (`tep-none`).
+
+When a generic `{season} {ordinal}` PICK row exists (e.g. `2027 1st`), keep using that single value. When it does not, and FantasyCalc Early/Mid/Late band rows exist for that pick, do **not** pick a band or a slot. Leave the single-number field empty, set `data_status=PARTIAL`, and put the low/high range plus band labels in provenance (`source_notes` / `missing_value` reason). The static round table (R1=3000…R5=100) remains labeled `config_pick_table` fallback only when **neither** a generic row nor band rows exist. No `projected_slot`, no CSV/xlsx overlay, no conditional-trade engine. Tests stay respx/fixture-only.
+
+This supersedes the same-day “omit `tep=none` / ignore banded rows” sentences for these two residuals. Generic-row matching from PR #15 stays; #15 is still not merged.
+
+Alternatives considered: keep omitting `tep` as equivalent to none; pick Mid (or Early) as a single number; average the bands; keep using the static table whenever the generic row is missing.
+
+Why this one: the public enum includes `none`, so supported non-TEP queries should send it. Band rows are real provider data but not a known slot; a range plus PARTIAL is honest, a fabricated single slot is not.

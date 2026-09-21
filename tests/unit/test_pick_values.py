@@ -10,8 +10,10 @@ from yellow_sleeper.analyze.pipelines import (
 )
 from yellow_sleeper.analyze.value import (
     match_fantasycalc_pick,
+    match_fantasycalc_pick_bands,
     pick_records_by_name,
     pick_value_source,
+    resolve_pick_value,
 )
 from yellow_sleeper.config import DynamicPolicy
 from yellow_sleeper.models import DataStatus, Pick
@@ -52,6 +54,36 @@ def test_missing_pick_row_falls_back_to_labeled_static_table() -> None:
     empty = pick_value_source(1, pick=_pick(2027, 1), pick_index={})
     assert empty.source == "config_pick_table"
     assert empty.value == 3000.0
+
+
+def test_band_rows_without_generic_are_a_range_not_a_slot() -> None:
+    pick_index = pick_records_by_name(load_fixture("fantasycalc/values_current.json"))
+    second = _pick(2028, 2)
+    assert match_fantasycalc_pick(second, pick_index) is None
+    bands = match_fantasycalc_pick_bands(second, pick_index)
+    assert bands is not None
+    assert bands.low == 700
+    assert bands.high == 1800
+    assert bands.bands == (("Early", 1800.0), ("Mid", 1100.0), ("Late", 700.0))
+    resolved = resolve_pick_value(2, pick=second, pick_index=pick_index)
+    assert resolved.source.source == "fantasycalc"
+    assert resolved.source.value is None
+    note = resolved.band_range.explanation(second) if resolved.band_range else ""
+    assert "low=700" in note
+    assert "high=1800" in note
+    assert "Early=1800" in note
+    assert "Mid=1100" in note
+    assert "Late=700" in note
+    assert "1200" not in note
+
+
+def test_generic_row_still_wins_when_bands_also_exist() -> None:
+    pick_index = pick_records_by_name(load_fixture("fantasycalc/values_current.json"))
+    first = _pick(2027, 1)
+    resolved = resolve_pick_value(1, pick=first, pick_index=pick_index)
+    assert resolved.source.value == 4100
+    assert resolved.band_range is None
+    assert match_fantasycalc_pick_bands(first, pick_index) is not None
 
 
 def test_trade_pick_uses_fantasycalc_generic_row(sleeper_snapshot: dict) -> None:
@@ -115,3 +147,70 @@ def test_power_map_pick_total_uses_provider_rows(sleeper_snapshot: dict) -> None
     assert casey_with.pick_total is not None
     assert casey_without.pick_total is not None
     assert casey_with.pick_total != casey_without.pick_total
+
+
+def test_trade_band_only_pick_is_partial_range_not_static_slot(
+    sleeper_snapshot: dict,
+) -> None:
+    result = analyze_trade_pipeline(
+        my_send=["2028 2nd"],
+        my_receive=["Jaylen Wright"],
+        policy=DynamicPolicy(),
+        snapshot=sleeper_snapshot,
+        players=load_fixture("sleeper/players_nfl.json"),
+        values=load_fixture("fantasycalc/values_current.json"),
+        sleeper_username="casey",
+        league_format="14-team SF PPR 0.5 TEP",
+        values_timestamp=datetime(2024, 1, 15, 12, 0, tzinfo=UTC),
+    )
+    assert result.value_math is not None
+    pick_asset = next(
+        asset
+        for asset in result.value_math.per_asset
+        if str(asset["asset"]).startswith("pick_2028_r2_")
+    )
+    assert pick_asset["value"] is None
+    assert pick_asset["sources"][0].source == "fantasycalc"
+    assert pick_asset["sources"][0].value is None
+    assert result.data_status == DataStatus.PARTIAL
+    notes = " ".join(note.explanation or "" for note in result.source_notes)
+    assert "low=700" in notes
+    assert "high=1800" in notes
+    assert "Early=1800" in notes
+    assert "Mid=1100" in notes
+    assert "Late=700" in notes
+    flag_reasons = " ".join(flag.reason for flag in result.policy_flags)
+    assert "low=700" in flag_reasons
+
+
+def test_power_map_band_only_pick_does_not_add_static_slot(sleeper_snapshot: dict) -> None:
+    values = load_fixture("fantasycalc/values_current.json")
+    without_2028_second_bands = [
+        row
+        for row in values
+        if not str(row["player"]["name"]).startswith("2028 2nd (")
+    ]
+    with_bands = league_power_map_output(
+        snapshot=sleeper_snapshot,
+        players=load_fixture("sleeper/players_nfl.json"),
+        values=values,
+        include_pick_value=True,
+        league_format="14-team SF PPR 0.5 TEP",
+    )
+    without_bands = league_power_map_output(
+        snapshot=sleeper_snapshot,
+        players=load_fixture("sleeper/players_nfl.json"),
+        values=without_2028_second_bands,
+        include_pick_value=True,
+        league_format="14-team SF PPR 0.5 TEP",
+    )
+    casey_with = next(team for team in with_bands.teams if team.username == "casey")
+    casey_without = next(team for team in without_bands.teams if team.username == "casey")
+    assert casey_with.pick_total is not None
+    assert casey_without.pick_total is not None
+    # Band-only 2028 2nd must not contribute static R2=1200.
+    assert casey_with.pick_total == casey_without.pick_total - 1200
+    assert with_bands.data_status == DataStatus.PARTIAL
+    notes = " ".join(note.explanation or "" for note in with_bands.source_notes)
+    assert "low=700" in notes
+    assert "Early=1800" in notes

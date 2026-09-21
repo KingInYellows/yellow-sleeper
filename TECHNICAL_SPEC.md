@@ -1079,4 +1079,5 @@ Historical §1–14 remain the MVP spec. Preview behavior:
 * **Logging:** `yellow_sleeper.*` JSON logs redact identity in extras, messages, args, exceptions, and `/league/<id>` URLs. MCP stdout tool payloads are unredacted.
 * **Install examples** use `/home/you/.yellow-sleeper-cache` and username `casey` (synthetic). Authorship owner line is unchanged.
 * **Public YAML sample:** tracked `.yellow-sleeper.yaml.example` uses fictional placeholder policy names. The YAML block under §11 is historical MVP text and is not the public copy-paste sample.
-* **Still deferred:** HTTP transport, Docker, OAuth, transactions, xlsx overlay, FantasyCalc early/mid/late pick bands, conditionals, multi-user.
+* **Still deferred:** HTTP transport, Docker, OAuth, transactions, xlsx overlay, projected_slot, conditionals, multi-user.
+* **Valuation residuals (2026-09-21):** Supported non-TEP queries send documented `tep=none` (bare `tep=` errors; the key is no longer omitted). Generic `{season} {ordinal}` PICK rows still win as a single value. When only Early/Mid/Late band rows exist, provenance reports low/high plus band labels, `data_status=PARTIAL`, and the single-number field stays empty. Static `PICK_VALUE_BY_ROUND` is fallback only when neither generic nor band rows exist.

@@ -45,6 +45,7 @@ from ..models import (
     SourceNote,
     TeamRollup,
     ValueMath,
+    ValueSourceBreakdown,
     WhatsOnTheClockOutput,
 )
 from ..resolve import resolve_pick_description, resolve_player, resolve_roster
@@ -60,8 +61,8 @@ from .value import (
     parse_value_records,
     pick_records,
     pick_records_by_name,
-    pick_value_source,
     player_value_source,
+    resolve_pick_value,
     source_disagreement,
     valuation_explanation,
     value_source,
@@ -481,7 +482,7 @@ def analyze_trade_pipeline(
             roster_context=None,
         )
 
-    value_math, missing_assets = _trade_value_math(
+    value_math, missing_assets, band_notes = _trade_value_math(
         send_resolutions,
         receive_resolutions,
         inventory,
@@ -489,9 +490,11 @@ def analyze_trade_pipeline(
         pick_index,
         timestamp=values_timestamp,
     )
-    flags.extend(_missing_value_flags(missing_assets))
+    flags.extend(_missing_value_flags(missing_assets, band_notes))
     flags.extend(_value_cache_flags(values_cache_status, values_cache_error))
-    data_status = _trade_data_status(value_math, missing_assets)
+    data_status = _trade_data_status(
+        value_math, missing_assets, band_range_assets=list(band_notes)
+    )
     data_status = _with_stale_data_status(data_status, values_cache_status)
     roster_context = _roster_context(
         snapshot,
@@ -501,31 +504,33 @@ def analyze_trade_pipeline(
         receive_resolutions,
         inventory,
     )
+    source_notes = [
+        _source_note("asset_resolution", "sleeper"),
+        _source_note(
+            "value_math",
+            "fantasycalc",
+            cache_status=values_cache_status,
+            explanation=valuation_explanation(
+                tep_tier,
+                league_format=league_format,
+                cache_error=values_cache_error,
+                pick_rows_present=bool(pick_index),
+            ),
+            timestamp=values_timestamp,
+        ),
+        _source_note(
+            "roster_context.age_stats",
+            "computed",
+            explanation="Pick ages are treated as 0 for pick-conversion context.",
+        ),
+    ]
+    source_notes.extend(_pick_band_range_notes(band_notes, values_timestamp))
     return AnalyzeTradeOutput(
         policy_status=PolicyStatus.OK,
         resolution_status=resolution_status,
         data_status=data_status,
         policy_flags=flags,
-        source_notes=[
-            _source_note("asset_resolution", "sleeper"),
-            _source_note(
-                "value_math",
-                "fantasycalc",
-                cache_status=values_cache_status,
-                explanation=valuation_explanation(
-                    tep_tier,
-                    league_format=league_format,
-                    cache_error=values_cache_error,
-                    pick_rows_present=bool(pick_index),
-                ),
-                timestamp=values_timestamp,
-            ),
-            _source_note(
-                "roster_context.age_stats",
-                "computed",
-                explanation="Pick ages are treated as 0 for pick-conversion context.",
-            ),
-        ],
+        source_notes=source_notes,
         config_sources=config_sources or [],
         asset_resolution=asset_resolutions,
         value_math=value_math,
@@ -551,6 +556,7 @@ def league_power_map_output(
     names = _user_by_owner(snapshot)
     teams: list[TeamRollup] = []
     missing_any = False
+    band_notes: dict[str, str] = {}
     for roster in snapshot["rosters"]:
         roster_players = [
             _roster_player(
@@ -569,6 +575,15 @@ def league_power_map_output(
                 if player.position in rollups:
                     rollups[player.position] += player.value
         roster_total = round(sum(rollups.values()), 2)
+        pick_total = None
+        if include_pick_value:
+            pick_total, roster_band_notes = _pick_total(
+                snapshot,
+                int(roster["roster_id"]),
+                pick_index,
+                timestamp=values_timestamp,
+            )
+            band_notes.update(roster_band_notes)
         teams.append(
             TeamRollup(
                 roster_id=int(roster["roster_id"]),
@@ -576,44 +591,37 @@ def league_power_map_output(
                 username=names[int(roster["roster_id"])]["username"],
                 positional_rollups=rollups,  # type: ignore[arg-type]
                 roster_total=roster_total,
-                pick_total=(
-                    _pick_total(
-                        snapshot,
-                        int(roster["roster_id"]),
-                        pick_index,
-                        timestamp=values_timestamp,
-                    )
-                    if include_pick_value
-                    else None
-                ),
+                pick_total=pick_total,
                 roster_age=_age_stats(roster_players, roster_players),
                 missing_flags=missing[:10],
                 context_summary=_context_summary(rollups, roster_players),
             )
         )
+    source_notes = [
+        _source_note("teams", "sleeper"),
+        _source_note(
+            "teams[].roster_total",
+            "fantasycalc",
+            cache_status=values_cache_status,
+            explanation=valuation_explanation(
+                tep_tier,
+                league_format=league_format,
+                cache_error=values_cache_error,
+                pick_rows_present=bool(pick_index),
+            ),
+            timestamp=values_timestamp,
+        ),
+    ]
+    source_notes.extend(_pick_band_range_notes(band_notes, values_timestamp))
     return LeaguePowerMapOutput(
         policy_status=PolicyStatus.OK,
         resolution_status=ResolutionStatus.OK,
         data_status=_with_stale_data_status(
-            DataStatus.PARTIAL if missing_any else DataStatus.COMPLETE,
+            DataStatus.PARTIAL if missing_any or band_notes else DataStatus.COMPLETE,
             values_cache_status,
         ),
         policy_flags=_value_cache_flags(values_cache_status, values_cache_error),
-        source_notes=[
-            _source_note("teams", "sleeper"),
-            _source_note(
-                "teams[].roster_total",
-                "fantasycalc",
-                cache_status=values_cache_status,
-                explanation=valuation_explanation(
-                    tep_tier,
-                    league_format=league_format,
-                    cache_error=values_cache_error,
-                    pick_rows_present=bool(pick_index),
-                ),
-                timestamp=values_timestamp,
-            ),
-        ],
+        source_notes=source_notes,
         teams=teams,
     )
 
@@ -1044,15 +1052,16 @@ def _trade_value_math(
     pick_index: Mapping[str, FCRecord],
     *,
     timestamp: datetime | None = None,
-) -> tuple[ValueMath, list[str]]:
+) -> tuple[ValueMath, list[str], dict[str, str]]:
     per_asset = []
     send_total = 0.0
     receive_total = 0.0
     missing_assets = []
     disagreements = []
+    band_notes: dict[str, str] = {}
     for side, resolutions in [("send", send), ("receive", receive)]:
         for resolution in resolutions:
-            asset_source = _asset_value_source(
+            asset_source, band_note = _asset_value_source(
                 resolution, inventory, value_index, pick_index, timestamp=timestamp
             )
             value = asset_source.value
@@ -1064,6 +1073,8 @@ def _trade_value_math(
                     "sources": [asset_source],
                 }
             )
+            if band_note:
+                band_notes[resolution.input] = band_note
             if value is None:
                 missing_assets.append(resolution.input)
                 continue
@@ -1085,6 +1096,7 @@ def _trade_value_math(
             source_disagreement=disagreements[0] if disagreements else None,
         ),
         missing_assets,
+        band_notes,
     )
 
 
@@ -1095,29 +1107,43 @@ def _asset_value_source(
     pick_index: Mapping[str, FCRecord],
     *,
     timestamp: datetime | None = None,
-):
+) -> tuple[ValueSourceBreakdown, str | None]:
     if resolution.asset_type == "player" and resolution.resolved_id:
-        return player_value_source(
-            resolution.resolved_id, value_index, timestamp=timestamp
+        return (
+            player_value_source(
+                resolution.resolved_id, value_index, timestamp=timestamp
+            ),
+            None,
         )
     pick = next(
         (pick for pick in inventory.league_picks if pick.pick_token == resolution.resolved_id),
         None,
     )
-    return pick_value_source(
+    resolved = resolve_pick_value(
         pick.round if pick else 0,
         pick=pick,
         pick_index=pick_index,
         timestamp=timestamp,
     )
+    band_note = resolved.band_range.explanation(pick) if resolved.band_range and pick else None
+    return resolved.source, band_note
 
 
-def _trade_data_status(value_math: ValueMath, missing_assets: list[str]) -> DataStatus:
-    if not value_math.per_asset or len(missing_assets) == len(value_math.per_asset):
+def _trade_data_status(
+    value_math: ValueMath,
+    missing_assets: list[str],
+    *,
+    band_range_assets: list[str] | None = None,
+) -> DataStatus:
+    if not value_math.per_asset:
         return DataStatus.UNAVAILABLE
-    if missing_assets:
+    has_number = any(asset["value"] is not None for asset in value_math.per_asset)
+    has_band = bool(band_range_assets)
+    if has_number and not missing_assets:
+        return DataStatus.COMPLETE
+    if has_number or has_band:
         return DataStatus.PARTIAL
-    return DataStatus.COMPLETE
+    return DataStatus.UNAVAILABLE
 
 
 def _value_data_status(resolved: bool, has_value: bool) -> DataStatus:
@@ -1126,18 +1152,39 @@ def _value_data_status(resolved: bool, has_value: bool) -> DataStatus:
     return DataStatus.COMPLETE if has_value else DataStatus.PARTIAL
 
 
-def _missing_value_flag(asset: str) -> PolicyFlag:
+def _missing_value_flag(asset: str, reason: str | None = None) -> PolicyFlag:
     return PolicyFlag(
         type=FlagType.MISSING_VALUE,
         asset=asset,
         rule_source="computed",
         severity=FlagSeverity.WARNING,
-        reason="No enabled value source returned a value for this asset.",
+        reason=reason or "No enabled value source returned a value for this asset.",
     )
 
 
-def _missing_value_flags(assets: list[str]) -> list[PolicyFlag]:
-    return [_missing_value_flag(asset) for asset in assets]
+def _missing_value_flags(
+    assets: list[str],
+    band_notes: Mapping[str, str] | None = None,
+) -> list[PolicyFlag]:
+    notes = band_notes or {}
+    return [_missing_value_flag(asset, notes.get(asset)) for asset in assets]
+
+
+def _pick_band_range_notes(
+    band_notes: Mapping[str, str],
+    timestamp: datetime | None = None,
+) -> list[SourceNote]:
+    if not band_notes:
+        return []
+    unique = list(dict.fromkeys(band_notes.values()))
+    return [
+        _source_note(
+            "pick_band_range",
+            "fantasycalc",
+            explanation="; ".join(unique),
+            timestamp=timestamp,
+        )
+    ]
 
 
 def _roster_context(
@@ -1254,16 +1301,20 @@ def _pick_total(
     pick_index: Mapping[str, FCRecord],
     *,
     timestamp: datetime | None = None,
-) -> float:
+) -> tuple[float, dict[str, str]]:
     inventory = build_pick_inventory(snapshot, my_roster_id=roster_id)
     total = 0.0
+    band_notes: dict[str, str] = {}
     for pick in inventory.owned_picks:
-        source = pick_value_source(
+        resolved = resolve_pick_value(
             pick.round, pick=pick, pick_index=pick_index, timestamp=timestamp
         )
-        if source.value is not None:
-            total += float(source.value)
-    return total
+        if resolved.band_range is not None:
+            band_notes[pick.pick_token] = resolved.band_range.explanation(pick)
+            continue
+        if resolved.source.value is not None:
+            total += float(resolved.source.value)
+    return total, band_notes
 
 
 def _context_summary(rollups: dict[str, float], players: list[RosterPlayer]) -> str:

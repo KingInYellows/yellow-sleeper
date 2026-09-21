@@ -121,6 +121,7 @@ async def test_valuation_cache_is_isolated_by_query_shape(tmp_path: Path) -> Non
     assert te_plus != twelve
     assert "v1" in te_plus
     assert "tep-te+" in te_plus
+    assert "tep-none" in te_off
 
 
 @pytest.mark.asyncio
