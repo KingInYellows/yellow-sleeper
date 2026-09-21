@@ -255,6 +255,14 @@ What was just completed:
 - Supported non-TEP FantasyCalc queries send documented `tep=none` instead of omitting the key. Default 14-team SF full-PPR 0.5 TEP still sends `tep=te+`; `te++` unchanged.
 - When a generic `{season} {ordinal}` PICK row is missing but Early/Mid/Late band rows exist, provenance reports low/high plus band labels and `data_status=PARTIAL`; the single-number field is not a fabricated slot. Static R1=3000 remains labeled fallback only when neither generic nor band rows exist.
 
+Validation commands run:
+- `uv lock --check` — passed (exit 0).
+- `uv sync --frozen --extra dev` — passed (exit 0).
+- `uv run ruff check src tests scripts` — passed (exit 0).
+- `uv run python -m pytest tests/ -q` — passed, **124 tests** collected and passed (exit 0). No live Sleeper/FantasyCalc HTTP (also 124 passed with HTTP(S)_PROXY blackhole).
+- `uv build && uv run python scripts/inspect_dist.py` — passed (exit 0).
+- `uv run yellow-sleeper --help` — passed without identity (exit 0).
+
 What's next:
 - Coordinator/owner review of draft PR. Stay draft.
 
