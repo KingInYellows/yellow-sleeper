@@ -2,18 +2,17 @@
 
 Local, single-user, read-only stdio MCP server for one Sleeper dynasty league. It answers roster, pick, value, and trade-guardrail questions for a configured owner. It does not place waivers, send trades, host HTTP, or talk to paid models.
 
-This README describes the **public developer-preview candidate** on branch `agent/public-developer-preview`. It is not `main`, and it is not the unmerged feature PRs.
+This README describes current `main`. Settings-matched FantasyCalc valuations and provider-backed picks are on this branch. Unmerged feature PRs are not.
 
 ## What this is vs what it is not
 
 | Surface | Status |
 | --- | --- |
-| `main` (`c6c6564` and later) | Merged MVP: 11 `dynasty_*` tools, static pick table, FantasyCalc **without** `tep`, unscoped cache files, default username leftover removed only on this candidate |
-| This candidate | Explicit league/user, cache isolation, `tep=te+`, log redaction, CI, this README |
-| Unmerged PRs `#2` `#3` `#13` `#15` `#16` `#18` | Not in this preview. `#16` ideas (TEP query + cache-by-query-shape + CI skeleton) were **re-implemented here with attribution**, not merged |
+| `main` | Current installable tree: 11 `dynasty_*` tools, explicit league/user, cache isolation, settings-matched FantasyCalc queries, provider-backed generic PICK rows with labeled static fallback, log redaction, CI |
+| Unmerged PRs `#2` `#3` `#13` `#15` `#16` `#18` | Not on `main`. `#16` ideas (TEP query + cache-by-query-shape + CI skeleton) were **re-implemented here with attribution**, not merged |
 | Future | XLSX overlay, FantasyCalc early/mid/late pick bands, transactions, conditionals, HTTP/OAuth/Docker, multi-user |
 
-**Non-goals for this preview:** HTTP hosting, OAuth, Docker, transaction tools, workbook import, conditional-trade engine, multi-user, live API tests, Graphite submit.
+**Non-goals:** HTTP hosting, OAuth, Docker, transaction tools, workbook import, conditional-trade engine, multi-user, live API tests, Graphite submit.
 
 ## Data rights (read before install)
 
@@ -52,7 +51,6 @@ Python 3.11+ (3.12 is the primary CI image). [`uv`](https://docs.astral.sh/uv/) 
 ```bash
 git clone https://github.com/KingInYellows/yellow-sleeper.git
 cd yellow-sleeper
-git checkout agent/public-developer-preview
 uv sync --extra dev
 uv run yellow-sleeper --help
 ```
