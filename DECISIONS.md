@@ -73,3 +73,17 @@ Alternatives considered: keep the withheld LICENSE; treat MIT as a grant over li
 Why this one: the copyright holder named the grant; data-rights research showed provider terms still restrict commercial/redistribution use of their datasets.
 
 Sources consulted 2026-09-20 (public pages only; no live league data): [Sleeper API](https://docs.sleeper.com/), [Sleeper Terms of Use](https://sleeper.com/terms), [legacy support ToS URL](https://support.sleeper.com/en/articles/5432002-general-terms-of-service) (404), [FantasyCalc Terms of Usage](https://fantasycalc.com/terms-of-usage), [FantasyCalc API Docs](https://fantasycalc.com/api-docs), [FantasyCalc /terms SPA](https://fantasycalc.com/terms).
+
+## 2026-09-21 — League-true FantasyCalc query and provider-backed picks
+
+Decision: derive FantasyCalc `/values/current` params from configured `league_format` when every field maps to a value documented on the public [FantasyCalc API Docs](https://fantasycalc.com/api-docs) (consulted 2026-09-21): `isDynasty=true`, `numQbs` `"1"` or `"2"`, `numTeams` `8|10|12|14`, `ppr` `0|0.5|1`, `tep` omitted / `te+` / `te++`. Do not send `tep=none` (docs default is none; empty `tep=` has historically errored; this repo omits the key). Do not invent multipliers, extra TEP tiers, or undocumented team/PPR values. The default `14-team SF PPR 0.5 TEP` path still sends `tep=te+`.
+
+Unsupported combinations (unparseable format, `16`-team, `1.5 TEP`, SF+1QB conflict, missing PPR, and similar) do **not** reuse another board. They stay explicit missing/partial with reasons. Cache files stay isolated by schema version `v1` plus the normalized query that was actually sent.
+
+When the active values payload includes FantasyCalc `position=PICK` rows, pick assets use the generic `{season} {ordinal}` row (e.g. `2027 1st`) and provenance says so. Early/mid/late banded rows and Sleeper `roster_id`-as-slot are out of scope. The static round table (R1=3000…R5=100) remains fallback only, labeled `config_pick_table`, never presented as freshly fetched provider data.
+
+This re-implements the reviewed generic-row pick match from PR #15 (`cursor/stage2-value-accuracy-be01`, head `5139502`) with attribution. It does not merge #15 (no CSV overlay, no conditionals, no banded ladder).
+
+Alternatives considered: keep the pinned 14-team SF PPR `te+` query for every format and label approximations; merge #15’s overlay/banded/conditional stack; send `tep=none` instead of omitting.
+
+Why this one: smallest honest step that makes the query follow settings the public API actually documents, and that uses provider pick rows when they are in the payload.

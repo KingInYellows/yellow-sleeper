@@ -7,7 +7,12 @@ from typing import Any
 
 import httpx
 
-from .clients import FantasyCalcClient, SleeperClient, build_shared_client
+from .clients import (
+    FantasyCalcClient,
+    SleeperClient,
+    UnsupportedValuationQuery,
+    build_shared_client,
+)
 from .config import Config, IdentityConfigError, load_config
 from .obs.logging import configure_logging
 from .store import Cache, CacheReadResult
@@ -44,7 +49,10 @@ class Runtime:
         return result.data, result.status
 
     async def values_result(self, *, force: bool = False) -> CacheReadResult:
-        return await self.fantasycalc.get_current_values_cached(self.cache, force=force)
+        try:
+            return await self.fantasycalc.get_current_values_cached(self.cache, force=force)
+        except UnsupportedValuationQuery as exc:
+            return CacheReadResult(data=[], status="cached", error=exc)
 
     async def snapshot(self, *, force: bool = False) -> tuple[dict[str, Any], str]:
         self.config.require_identity()
@@ -93,6 +101,9 @@ class Runtime:
         for key, refresher in refreshers.items():
             if key in {"league_snapshot", "draft_state"} and identity_error:
                 failures[key] = identity_error[:500]
+                continue
+            if key == "fantasycalc_values" and not self.fantasycalc.supported_profile():
+                failures[key] = self.fantasycalc.unsupported_reason()[:500]
                 continue
             try:
                 await refresher(force=force)

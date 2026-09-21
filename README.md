@@ -11,7 +11,7 @@ This README describes the **public developer-preview candidate** on branch `agen
 | `main` (`c6c6564` and later) | Merged MVP: 11 `dynasty_*` tools, static pick table, FantasyCalc **without** `tep`, unscoped cache files, default username leftover removed only on this candidate |
 | This candidate | Explicit league/user, cache isolation, `tep=te+`, log redaction, CI, this README |
 | Unmerged PRs `#2` `#3` `#13` `#15` `#16` `#18` | Not in this preview. `#16` ideas (TEP query + cache-by-query-shape + CI skeleton) were **re-implemented here with attribution**, not merged |
-| Future | XLSX overlay, FantasyCalc pick ladder as primary pick values, transactions, conditionals, HTTP/OAuth/Docker, multi-user |
+| Future | XLSX overlay, FantasyCalc early/mid/late pick bands, transactions, conditionals, HTTP/OAuth/Docker, multi-user |
 
 **Non-goals for this preview:** HTTP hosting, OAuth, Docker, transaction tools, workbook import, conditional-trade engine, multi-user, live API tests, Graphite submit.
 
@@ -26,15 +26,23 @@ This README describes the **public developer-preview candidate** on branch `agen
 
 ## Supported valuation profile
 
-Pinned FantasyCalc `/values/current` query (supported profile: 14-team Superflex PPR, 0.5 TEP):
+FantasyCalc `/values/current` params are derived from configured `league_format` when every field maps to a value documented on the public [FantasyCalc API Docs](https://fantasycalc.com/api-docs):
 
-`isDynasty=true&numQbs=2&numTeams=14&ppr=1&tep=te+`
+| Param | Documented values | Default `14-team SF PPR 0.5 TEP` |
+| --- | --- | --- |
+| `isDynasty` | `true` (this product is dynasty-only) | `true` |
+| `numQbs` | `"1"` (1QB) or `"2"` (Superflex/2QB) | `2` |
+| `numTeams` | `8`, `10`, `12`, `14` | `14` |
+| `ppr` | `0`, `0.5`, `1` | `1` |
+| `tep` | omitted (none), `te+`, `te++` | `te+` |
 
-- `tep=te+` is the documented discrete TE+ tier (see public `dsheehan167/go-fantasycalc`; re-implemented from PR `#16`, not a local `0.5` multiplier).
-- `tep_tier=off` omits the `tep` key (empty `tep=` errors on the API).
-- `te++` is an explicit heavy-TEP discrete tier.
-- Other `league_format` strings still use this pinned query and are labeled **unsupported approximations** (including empty format, `14-team SF PPR` with no TEP token, `214-team`, `1QB` while the query is Superflex/`numQbs=2`, `0.5 PPR` / half-PPR / non-PPR, and `1.5 TEP`). The default `14-team SF PPR 0.5 TEP` string is the supported profile and is not labeled unsupported.
-- **Pick values** use the internal static round table (R1=3000, R2=1200, R3=600, R4=300, R5=100), not FantasyCalc pick rows. Valuation `source_notes` include that table and the TEP query; on stale/error paths the cache error is prepended rather than replacing those sentences.
+Default query: `isDynasty=true&numQbs=2&numTeams=14&ppr=1&tep=te+`
+
+- `tep=te+` is the documented discrete TE+ tier for 0.5 TEP (not a local `0.5` multiplier). `tep=none` is documented as the default; this server **omits** the key instead of sending `tep=none` or empty `tep=`.
+- `tep_tier=off` omits `tep` when the format does not request TEP. `te++` is the documented heavy-TEP discrete tier.
+- Supported examples include `12-team 1QB PPR`, `10-team Superflex 0.5 PPR`, `8-team SF non-PPR`, and `14-team SF PPR` (no TEP → tep omitted).
+- Unsupported combinations (`16`-team, `214-team`, SF+1QB together, missing PPR, `1.5 TEP`, empty format) **do not** reuse another board. Tools return missing/partial values with reasons. Cache files stay isolated by schema version `v1` plus the normalized query that was actually sent.
+- **Pick values:** when the active FantasyCalc payload includes `position=PICK` rows, picks use the generic `{season} {ordinal}` row (e.g. `2027 1st`) and provenance says `fantasycalc`. Early/mid/late bands and Sleeper `roster_id` slots are not used. The static round table (R1=3000, R2=1200, R3=600, R4=300, R5=100) is **fallback only**, labeled `config_pick_table`, never presented as freshly fetched provider data.
 - Missing/partial player values stay on the roster or pick list with `data_status` partial/unavailable. The server does not invent numbers.
 
 ## Install
@@ -167,7 +175,7 @@ Do not commit `.env`, `.yellow-sleeper.yaml`, caches, or logs. The example YAML 
 
 ## Limitations
 
-- Static pick table, not a live pick market.
+- Banded FantasyCalc pick rows (Early/Mid/Late) and projected draft slots are unused; generic season+round rows or the labeled static fallback.
 - XLSX overlay, conditionals, transactions, HTTP MCP, OAuth, Docker: out of scope.
 - MIT covers code and synthetic fixtures only; Sleeper/FantasyCalc commercial and redistribution rights stay a limitation (`NOTICE`).
 - GitHub org `KingInYellows` does not currently enable private vulnerability reporting.

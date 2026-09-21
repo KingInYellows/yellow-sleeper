@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -13,37 +14,85 @@ from ..store import Cache
 from ..store.paths import fantasycalc_cache_variant
 
 TepTier = Literal["off", "te+", "te++"]
-
-BASE_QUERY_PARAMS = {
-    "isDynasty": "true",
-    "numQbs": "2",
-    "numTeams": "14",
-    "ppr": "1",
-}
+FormatTep = Literal["te+", "te++"]
 
 _VALID_TEP_TIERS: set[TepTier] = {"off", "te+", "te++"}
+_VALID_NUM_TEAMS = frozenset({"8", "10", "12", "14"})
+_VALID_NUM_QBS = frozenset({"1", "2"})
+_VALID_PPR = frozenset({"0", "0.5", "1"})
+
+_TEAM_COUNT_RE = re.compile(r"(?<!\d)(8|10|12|14)(?:\s*-?\s*team)?\b")
+_TEP_AMOUNT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*tep\b")
+_TE_PLUS_PLUS_RE = re.compile(r"te\s*\+\+")
 
 PICK_TABLE_EXPLANATION = (
-    "Pick values use the internal static round table (R1=3000, R2=1200, R3=600, "
-    "R4=300, R5=100), not FantasyCalc pick rows."
+    "The static round table (R1=3000, R2=1200, R3=600, R4=300, R5=100) is fallback "
+    "only when no matching FantasyCalc PICK row exists; it is not freshly fetched "
+    "provider data."
+)
+
+PICK_PROVIDER_EXPLANATION = (
+    "Pick values use FantasyCalc PICK rows from the active query (generic "
+    "'{season} {ordinal}' names such as '2027 1st'; never Sleeper roster_id as a "
+    "slot). Re-implements the reviewed generic-row idea from PR #15 with attribution."
 )
 
 UNSUPPORTED_FORMAT_NOTE = (
-    "Supported valuation profile is 14-team Superflex PPR. Other league_format "
-    "strings still use that pinned FantasyCalc query and are unsupported approximations."
+    "FantasyCalc values were not fetched for this league_format. This is not a "
+    "silent reuse of another format's board."
 )
 
 
-def build_query_params(tep_tier: TepTier = "te+") -> dict[str, str]:
+class UnsupportedValuationQuery(ValueError):
+    """Raised when league settings cannot be mapped to a documented FantasyCalc query."""
+
+    def __init__(self, reasons: tuple[str, ...]) -> None:
+        self.reasons = reasons
+        super().__init__("; ".join(reasons)[:500])
+
+
+@dataclass(frozen=True)
+class FantasyCalcQuery:
+    supported: bool
+    params: dict[str, str]
+    reasons: tuple[str, ...]
+    tep_tier: TepTier
+    league_format: str
+
+    def encoded_query(self) -> str:
+        return "&".join(f"{key}={self.params[key]}" for key in sorted(self.params))
+
+
+def build_query_params(
+    tep_tier: TepTier = "te+",
+    *,
+    num_teams: str = "14",
+    num_qbs: str = "2",
+    ppr: str = "1",
+) -> dict[str, str]:
     """Build FantasyCalc /values/current query params.
 
-    ``tep_tier='off'`` omits the param (empty ``tep=`` errors on the API).
-    League 0.5 TEP maps to discrete ``te+``; ``tep=0.5`` is not a documented value.
-    Re-implements the PR #16 query-shape idea (head 3a253dd) with attribution.
+    ``tep_tier='off'`` omits the param (empty ``tep=`` errors on the API; docs
+    default ``tep=none`` is treated as omit, not sent). League 0.5 TEP maps to
+    discrete ``te+``; ``tep=0.5`` is not a documented value. Documented enums:
+    numTeams 8/10/12/14, numQbs 1/2, ppr 0/0.5/1, tep omitted/te+/te++
+    (FantasyCalc API docs, 2026-09-21). Re-implements the PR #16 query-shape
+    idea (head 3a253dd) with attribution.
     """
     if tep_tier not in _VALID_TEP_TIERS:
         raise ValueError(f"invalid tep_tier {tep_tier!r}; expected off, te+, or te++")
-    params = dict(BASE_QUERY_PARAMS)
+    if num_teams not in _VALID_NUM_TEAMS:
+        raise ValueError(f"invalid numTeams {num_teams!r}; expected 8, 10, 12, or 14")
+    if num_qbs not in _VALID_NUM_QBS:
+        raise ValueError(f"invalid numQbs {num_qbs!r}; expected 1 or 2")
+    if ppr not in _VALID_PPR:
+        raise ValueError(f"invalid ppr {ppr!r}; expected 0, 0.5, or 1")
+    params = {
+        "isDynasty": "true",
+        "numQbs": num_qbs,
+        "numTeams": num_teams,
+        "ppr": ppr,
+    }
     if tep_tier != "off":
         params["tep"] = tep_tier
     return params
@@ -81,21 +130,37 @@ class FantasyCalcClient:
         tep_tier: TepTier = "te+",
         query_params: dict[str, str] | None = None,
         league_format: str = "14-team SF PPR 0.5 TEP",
+        query: FantasyCalcQuery | None = None,
     ) -> None:
         self._http = http
-        self.tep_tier = tep_tier
         self.league_format = league_format
-        self.query_params = (
-            query_params if query_params is not None else build_query_params(tep_tier)
+        self.query = query if query is not None else resolve_fantasycalc_query(
+            league_format, tep_tier=tep_tier
         )
+        self.tep_tier = self.query.tep_tier if self.query.supported else tep_tier
+        if query_params is not None:
+            self.query_params = query_params
+        elif self.query.supported:
+            self.query_params = dict(self.query.params)
+        else:
+            self.query_params = {}
 
     def cache_variant(self) -> str:
+        if not self.query.supported or not self.query_params:
+            return fantasycalc_cache_variant({"unsupported": "1"})
         return fantasycalc_cache_variant(self.query_params)
 
     def supported_profile(self) -> bool:
-        return format_looks_supported(self.league_format)
+        return self.query.supported
+
+    def unsupported_reason(self) -> str:
+        if self.query.supported:
+            return ""
+        return "; ".join(self.query.reasons)[:500]
 
     async def get_current_values(self) -> list[FCRecord]:
+        if not self.query.supported:
+            raise UnsupportedValuationQuery(self.query.reasons)
         response = await self._http.get(
             f"{self.BASE_URL}/values/current",
             params=self.query_params,
@@ -108,6 +173,9 @@ class FantasyCalcClient:
         return [FCRecord.model_validate(record) for record in raw]
 
     async def get_current_values_cached(self, cache: Cache, *, force: bool = False):
+        if not self.query.supported:
+            raise UnsupportedValuationQuery(self.query.reasons)
+
         async def fetch() -> list[dict]:
             return [record.model_dump(mode="json") for record in await self.get_current_values()]
 
@@ -119,6 +187,13 @@ class FantasyCalcClient:
         )
 
     async def probe(self) -> LiveProbeResult:
+        if not self.query.supported:
+            return LiveProbeResult(
+                source="fantasycalc",
+                reachable=False,
+                error=self.unsupported_reason()[:500],
+                probed_at=datetime.now(UTC),
+            )
         start = time.monotonic()
         try:
             response = await self._http.get(
@@ -161,55 +236,168 @@ def index_records(records: list[FCRecord]) -> dict[str, dict[str, FCRecord]]:
     }
 
 
-def tep_source_explanation(tep_tier: TepTier, *, league_format: str | None = None) -> str:
-    if tep_tier == "off":
-        text = (
-            "FantasyCalc values requested without TEP (non-TEP board; not a 0.5 TEP model)."
+def resolve_fantasycalc_query(
+    league_format: str | None,
+    *,
+    tep_tier: TepTier = "te+",
+) -> FantasyCalcQuery:
+    """Map configured league settings to a documented FantasyCalc query or reasons."""
+    format_text = league_format or ""
+    reasons: list[str] = []
+    if tep_tier not in _VALID_TEP_TIERS:
+        reasons.append(f"invalid tep_tier {tep_tier!r}")
+        return FantasyCalcQuery(False, {}, tuple(reasons), "off", format_text)
+
+    lowered = format_text.lower()
+    num_teams = _parse_num_teams(lowered, reasons)
+    num_qbs = _parse_num_qbs(lowered, reasons)
+    ppr = _parse_ppr(lowered, reasons)
+    format_tep = _parse_format_tep(lowered, reasons)
+    resolved_tep, tep_reasons = _resolve_tep_param(format_tep, tep_tier)
+    reasons.extend(tep_reasons)
+
+    if reasons or num_teams is None or num_qbs is None or ppr is None or resolved_tep is None:
+        if not reasons:
+            reasons.append("league_format does not map to a documented FantasyCalc query")
+        return FantasyCalcQuery(False, {}, tuple(reasons), tep_tier, format_text)
+
+    params = build_query_params(
+        resolved_tep, num_teams=num_teams, num_qbs=num_qbs, ppr=ppr
+    )
+    return FantasyCalcQuery(True, params, (), resolved_tep, format_text)
+
+
+def _parse_num_teams(lowered: str, reasons: list[str]) -> str | None:
+    matches = _TEAM_COUNT_RE.findall(lowered)
+    unique = list(dict.fromkeys(matches))
+    if len(unique) == 1:
+        return unique[0]
+    if not unique:
+        reasons.append("league_format has no documented numTeams (8, 10, 12, or 14)")
+        return None
+    reasons.append(f"league_format has conflicting team counts {unique}")
+    return None
+
+
+def _parse_num_qbs(lowered: str, reasons: list[str]) -> str | None:
+    has_1qb = bool(re.search(r"\b1\s*qb\b", lowered))
+    has_sf = (
+        "superflex" in lowered
+        or bool(re.search(r"\bsf\b", lowered))
+        or bool(re.search(r"\b2\s*qb\b", lowered))
+    )
+    if has_1qb and has_sf:
+        reasons.append("league_format lists both Superflex/2QB and 1QB")
+        return None
+    if has_sf:
+        return "2"
+    if has_1qb:
+        return "1"
+    reasons.append("league_format does not specify Superflex/2QB or 1QB")
+    return None
+
+
+def _parse_ppr(lowered: str, reasons: list[str]) -> str | None:
+    if re.search(r"\bnon[\s-]*ppr\b", lowered):
+        return "0"
+    if re.search(r"\b0\s*ppr\b", lowered) and not re.search(r"0\.5\s*ppr", lowered):
+        return "0"
+    if re.search(r"\bhalf[\s-]*ppr\b", lowered) or re.search(r"0\.5\s*ppr", lowered):
+        return "0.5"
+    if re.search(r"\bppr\s*0\.5\b(?!\s*tep)", lowered):
+        return "0.5"
+    if re.search(r"\bppr\b", lowered):
+        return "1"
+    reasons.append("league_format does not specify documented ppr (0, 0.5, or 1)")
+    return None
+
+
+def _parse_format_tep(lowered: str, reasons: list[str]) -> FormatTep | Literal["invalid"] | None:
+    has_te_plus_plus = bool(_TE_PLUS_PLUS_RE.search(lowered))
+    amounts = _TEP_AMOUNT_RE.findall(lowered)
+    if has_te_plus_plus and amounts:
+        reasons.append("league_format lists both a numeric TEP amount and te++")
+        return "invalid"
+    if has_te_plus_plus:
+        return "te++"
+    if not amounts:
+        return None
+    if all(amount == "0.5" for amount in amounts):
+        return "te+"
+    reasons.append(
+        "league_format TEP is not a documented FantasyCalc tep value "
+        "(omit, te+ for 0.5 TEP, or te++)"
+    )
+    return "invalid"
+
+
+def _resolve_tep_param(
+    format_tep: FormatTep | Literal["invalid"] | None,
+    tep_tier: TepTier,
+) -> tuple[TepTier | None, list[str]]:
+    if format_tep == "invalid":
+        return None, []
+    if format_tep == "te+" and tep_tier == "te++":
+        return None, ["league_format 0.5 TEP maps to tep=te+, not te++"]
+    if format_tep == "te+" and tep_tier == "off":
+        return None, ["league_format requests 0.5 TEP (te+) but tep_tier=off"]
+    if format_tep == "te++" and tep_tier == "off":
+        return None, ["league_format requests te++ but tep_tier=off"]
+    if format_tep == "te+":
+        return "te+", []
+    if format_tep == "te++":
+        return "te++", []
+    if format_tep is None:
+        if tep_tier == "te++":
+            return "te++", []
+        return "off", []
+    never: FormatTep = format_tep
+    raise RuntimeError(f"unhandled format_tep: {never}")
+
+
+def query_source_explanation(query: FantasyCalcQuery) -> str:
+    if not query.supported:
+        detail = "; ".join(query.reasons) if query.reasons else UNSUPPORTED_FORMAT_NOTE
+        return f"{UNSUPPORTED_FORMAT_NOTE} {detail}".strip()
+    encoded = query.encoded_query()
+    tep = query.tep_tier
+    if tep == "off":
+        tep_note = "tep omitted (non-TEP board; documented default none, key not sent)."
+    elif tep == "te+":
+        tep_note = (
+            "tep=te+ (discrete TE+ tier approximating 0.5 TEP; not a continuous 0.5 float)."
         )
-    elif tep_tier == "te+":
-        text = (
-            "FantasyCalc values use tep=te+ (discrete TE+ tier approximating 0.5 TEP; "
-            "not a continuous 0.5 float). Documented by go-fantasycalc as te+/te++."
-        )
-    elif tep_tier == "te++":
-        text = "FantasyCalc values use tep=te++ (discrete heavy TE-premium tier)."
+    elif tep == "te++":
+        tep_note = "tep=te++ (discrete heavy TE-premium tier)."
     else:
+        never: TepTier = tep
+        raise RuntimeError(f"unhandled tep_tier: {never}")
+    return f"FantasyCalc values requested with {encoded}. {tep_note}"
+
+
+def tep_source_explanation(tep_tier: TepTier, *, league_format: str | None = None) -> str:
+    query = resolve_fantasycalc_query(league_format, tep_tier=tep_tier)
+    if league_format is None:
+        if tep_tier == "off":
+            return (
+                "FantasyCalc values requested without TEP (non-TEP board; not a 0.5 TEP model)."
+            )
+        if tep_tier == "te+":
+            return (
+                "FantasyCalc values use tep=te+ (discrete TE+ tier approximating 0.5 TEP; "
+                "not a continuous 0.5 float). Documented by go-fantasycalc as te+/te++."
+            )
+        if tep_tier == "te++":
+            return "FantasyCalc values use tep=te++ (discrete heavy TE-premium tier)."
         never: TepTier = tep_tier
         raise RuntimeError(f"unhandled tep_tier: {never}")
-    if league_format is not None and not format_looks_supported(league_format):
-        text = f"{text} {UNSUPPORTED_FORMAT_NOTE}"
-    return text
+    return query_source_explanation(query)
 
 
-def format_looks_supported(league_format: str | None) -> bool:
-    """True only for the advertised 14-team Superflex full-PPR 0.5 TEP profile.
+def format_looks_supported(league_format: str | None, *, tep_tier: TepTier = "te+") -> bool:
+    """True when league_format maps to a documented FantasyCalc query.
 
-    Empty format is unsupported. ``0.5 PPR`` / half-PPR / non-PPR / ``1.5 TEP``
-    must not match just because the string contains ``14``, ``sf``, and ``ppr``.
-    Team count 14 must not match as a substring of ``214-team``. Superflex
-    queries (``numQbs=2``) reject ``1QB``. TEP requires an explicit ``0.5``
-    token so ``14-team SF PPR`` (no TEP) is unsupported.
+    Empty format is unsupported. Team counts outside {8,10,12,14}, SF+1QB
+    conflicts, missing PPR, and undocumented TEP amounts do not send a query.
     """
-    if not league_format or not league_format.strip():
-        return False
-    lowered = league_format.lower()
-    if not re.search(r"(?<!\d)14(?:\s*-?\s*team)?\b", lowered):
-        return False
-    if "sf" not in lowered and "superflex" not in lowered:
-        return False
-    if re.search(r"\b1\s*qb\b", lowered):
-        return False
-    if re.search(r"\bnon[\s-]*ppr\b", lowered):
-        return False
-    if re.search(r"\bhalf[\s-]*ppr\b", lowered):
-        return False
-    if re.search(r"0\.5\s*ppr", lowered):
-        return False
-    if re.search(r"\bppr\s*0\.5\b(?!\s*tep)", lowered):
-        return False
-    if not re.search(r"\bppr\b", lowered):
-        return False
-    tep_amounts = re.findall(r"(\d+(?:\.\d+)?)\s*tep\b", lowered)
-    if not tep_amounts:
-        return False
-    return all(amount == "0.5" for amount in tep_amounts)
+    return resolve_fantasycalc_query(league_format, tep_tier=tep_tier).supported

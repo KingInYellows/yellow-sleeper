@@ -42,7 +42,7 @@
 | `src/yellow_sleeper/resolve/picks.py` | Pick description parser and 100/50/0 pick resolution. |
 | `src/yellow_sleeper/analyze/__init__.py` | Analysis exports. |
 | `src/yellow_sleeper/analyze/roster.py` | Pick inventory native grid, traded overlay, and roster helpers. |
-| `src/yellow_sleeper/analyze/value.py` | FantasyCalc value parsing and MVP static pick value table. |
+| `src/yellow_sleeper/analyze/value.py` | FantasyCalc value parsing, provider pick rows, and static pick-table fallback. |
 | `src/yellow_sleeper/analyze/pipelines.py` | Typed output builders for all eleven `dynasty_*` tools. |
 | `src/yellow_sleeper/obs/__init__.py` | Observability utility exports. |
 | `src/yellow_sleeper/obs/caps.py` | String and array cap utilities. |
@@ -106,12 +106,12 @@ Preview candidate verification is recorded in the section below; re-run those co
 
 Spec deferrals:
 - XLSX value overlay is not implemented.
-- TEP-aware value adjustment is not implemented; FantasyCalc values remain the MVP non-TEP approximation.
+- TEP-aware value adjustment is not implemented as a local multiplier; FantasyCalc discrete `tep` enums are used when the format maps.
 - Conditional trades and pick swaps are not implemented beyond unresolved/clarification behavior.
 - Multi-user support, public HTTP transport, Docker packaging, OAuth, and live Sleeper notifications are not implemented.
 
 Implementation shortcuts:
-- Pick values use the internal static round table recorded in `DECISIONS.md`.
+- Pick values use FantasyCalc generic PICK rows when present; otherwise the internal static round table recorded in `DECISIONS.md` (labeled fallback, not provider data).
 - Smoke scenarios are derived from the frozen contracts/spec because the PRD has no literal `Success Metrics` section.
 - Tests use hand-crafted fixtures only; no fixture was generated from live APIs.
 
