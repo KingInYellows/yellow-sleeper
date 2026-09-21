@@ -222,3 +222,28 @@ What's next:
 Blockers:
 - Commercial/redistribution rights for Sleeper and FantasyCalc payloads remain an explicit limitation (`NOTICE`), not a grant.
 
+## 2026-09-21 — League-true valuations (provider picks + settings-matched query)
+
+Current milestone: league-true valuations on `agent/league-true-valuations` (draft PR).
+
+What was just completed:
+- FantasyCalc `/values/current` params derived from `league_format` when they map to documented `numTeams` / `numQbs` / `ppr` / `tep`. Default `14-team SF PPR 0.5 TEP` still sends `tep=te+`. Unsupported combinations skip the fetch.
+- Provider-backed generic PICK rows when present; static R1=3000 table labeled as fallback only (PR #15 generic-row idea re-implemented with attribution; overlay/conditionals/bands not merged).
+- README supported set and limitations updated.
+
+Validation commands run:
+- `uv lock --check` — passed (exit 0).
+- `uv sync --frozen --extra dev` — passed (exit 0).
+- `uv run ruff check src tests scripts` — passed (exit 0).
+- `uv run python -m pytest tests/ -q` — passed, **120 tests** collected and passed (exit 0). No live Sleeper/FantasyCalc HTTP.
+- `uv build && uv run python scripts/inspect_dist.py` — passed (exit 0).
+- `uv run yellow-sleeper --help` — passed without identity (exit 0).
+- `uv tool install --force .` into a disposable `UV_TOOL_DIR` / `UV_TOOL_BIN_DIR`; `yellow-sleeper --help` from a non-repo cwd — passed (exit 0).
+
+What's next:
+- Coordinator/owner review of draft PR. Stay draft.
+
+Blockers:
+- Commercial/redistribution rights for Sleeper and FantasyCalc payloads remain an explicit limitation (`NOTICE`), not a grant.
+- Banded FantasyCalc pick rows and projected slots remain unused.
+

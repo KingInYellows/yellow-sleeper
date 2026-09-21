@@ -100,6 +100,8 @@ The final run in this workspace passed with 50 tests: 39 unit, 5 integration, an
 
 Preview candidate verification on `agent/public-developer-preview`: `uv run python -m pytest tests/ -q` passed with **108 tests** (recount after owner-decision tests; was 101 at `6e344a5`, previously documented as 88).
 
+League-true valuations on `agent/league-true-valuations`: `uv run python -m pytest tests/ -q` passed with **120 tests**.
+
 Preview candidate verification is recorded in the section below; re-run those commands on `agent/public-developer-preview`.
 
 ## Known Gaps
@@ -154,4 +156,27 @@ Known preview gaps:
 - Sleeper/FantasyCalc commercial and redistribution rights remain an explicit limitation (`NOTICE`), not a grant.
 - Cursor MCP `mcp.json` fields were checked against https://cursor.com/docs/mcp (docs-only). Stdio initialize/tools/list/tools/call is exercised in `tests/smoke/test_mcp_stdio.py`.
 - Unmerged PRs `#2` `#3` `#13` `#15` `#16` `#18` stay out of this branch.
+
+## League-true valuations (2026-09-21)
+
+Branch: `agent/league-true-valuations`. Draft PR only. Does not merge `#15`.
+
+What this adds on top of the preview candidate:
+
+- FantasyCalc query follows documented settings parsed from `league_format` (`numTeams` 8/10/12/14, `numQbs` 1/2, `ppr` 0/0.5/1, `tep` omitted/`te+`/`te++`). Default 14-team SF full-PPR 0.5 TEP still sends `tep=te+`.
+- Unsupported formats do not reuse another board; tools return missing/partial with reasons.
+- Provider generic PICK rows when present; static round table is labeled fallback only.
+
+Verification:
+
+```bash
+uv lock --check
+uv sync --frozen --extra dev
+uv run ruff check src tests scripts
+uv run python -m pytest tests/ -q
+uv build && uv run python scripts/inspect_dist.py
+uv run yellow-sleeper --help
+```
+
+The run on this head passed with **120 tests** (exit 0 on every command above). Stdio MCP smoke remains in `tests/smoke/test_mcp_stdio.py`.
 
