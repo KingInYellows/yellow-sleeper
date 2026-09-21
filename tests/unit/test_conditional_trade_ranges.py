@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import time
+
 from tests.conftest import load_fixture
-from yellow_sleeper.analyze.pipelines import analyze_trade_pipeline
+from yellow_sleeper.analyze.pipelines import (
+    _scenario_delta_bounds,
+    analyze_trade_pipeline,
+)
 from yellow_sleeper.analyze.trade_phrases import (
     is_open_ended_trade,
     normalize_trade_asset,
@@ -162,3 +167,26 @@ def test_mixed_or_hard_untouchable_player_still_blocks(sleeper_snapshot: dict) -
     assert result.value_math is None
     assert any(rule.matched_against == "Drake London" for rule in result.blocking_rules)
     assert any("Drake London" in rule.asset for rule in result.blocking_rules)
+
+
+def test_or_range_bounds_stay_bounded_without_cartesian_product() -> None:
+    # Six five-way assets per side is 5^12 (~244 million) deltas under full enumeration.
+    send_options = [[float(base + offset) for offset in range(5)] for base in range(6)]
+    receive_options = [
+        [float(10 + base + offset) for offset in range(5)] for base in range(6)
+    ]
+    cartesian = 1
+    for options in send_options + receive_options:
+        cartesian *= len(options)
+    assert cartesian == 5**12
+
+    started = time.perf_counter()
+    bounds = _scenario_delta_bounds(send_options, receive_options)
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 1.0
+    send_min = sum(min(options) for options in send_options)
+    send_max = sum(max(options) for options in send_options)
+    receive_min = sum(min(options) for options in receive_options)
+    receive_max = sum(max(options) for options in receive_options)
+    assert bounds == (receive_min - send_max, receive_max - send_min)

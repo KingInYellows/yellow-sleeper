@@ -4,7 +4,6 @@ import re
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
-from itertools import product
 from statistics import mean, median
 from typing import Any
 
@@ -1578,15 +1577,12 @@ def _scenario_delta_bounds(
         return None
     if any(not options for options in send_options + receive_options):
         return None
-    send_totals = [sum(combo) for combo in product(*send_options)]
-    receive_totals = [sum(combo) for combo in product(*receive_options)]
-    deltas = [
-        receive_total - send_total
-        for receive_total, send_total in product(receive_totals, send_totals)
-    ]
-    if not deltas:
-        return None
-    return min(deltas), max(deltas)
+    # Independent linear sums: extrema are per-asset min/max, not a Cartesian product.
+    send_min = sum(min(options) for options in send_options)
+    send_max = sum(max(options) for options in send_options)
+    receive_min = sum(min(options) for options in receive_options)
+    receive_max = sum(max(options) for options in receive_options)
+    return receive_min - send_max, receive_max - send_min
 
 
 def _asset_value_source(
