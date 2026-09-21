@@ -10,7 +10,7 @@ This README describes current `main`. Settings-matched FantasyCalc valuations an
 | --- | --- |
 | `main` | Current installable tree: 11 `dynasty_*` tools, explicit league/user, cache isolation, settings-matched FantasyCalc queries, provider-backed generic PICK rows with labeled static fallback, log redaction, CI |
 | Unmerged PRs `#2` `#3` `#13` `#15` `#16` `#18` | Not on `main`. `#16` ideas (TEP query + cache-by-query-shape + CI skeleton) were **re-implemented here with attribution**, not merged |
-| Future | XLSX overlay, FantasyCalc early/mid/late pick bands, transactions, conditionals, HTTP/OAuth/Docker, multi-user |
+| Future | XLSX overlay, transactions, conditionals, HTTP/OAuth/Docker, multi-user |
 
 **Non-goals:** HTTP hosting, OAuth, Docker, transaction tools, workbook import, conditional-trade engine, multi-user, live API tests, Graphite submit.
 
