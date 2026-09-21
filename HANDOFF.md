@@ -109,7 +109,7 @@ Preview candidate verification is recorded in the section below; re-run those co
 Spec deferrals:
 - Optional CSV value overlay (`source=xlsx`) is implemented; a missing configured file is explicit, default unset path is FantasyCalc-only.
 - TEP-aware value adjustment is not implemented as a local multiplier; FantasyCalc discrete `tep` enums are used when the format maps.
-- Conditional trades and pick swaps are not implemented beyond unresolved/clarification behavior.
+- Conditional trades and pick swaps return a range or candidates plus clarification; they do not invent one delta. A normal trade still returns one value. No write/submit tools.
 - Multi-user support, public HTTP transport, Docker packaging, OAuth, and live Sleeper notifications are not implemented.
 
 Implementation shortcuts:

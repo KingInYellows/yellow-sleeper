@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+- Conditional, exclusive-OR, and pick-swap trade language returns `PARTIAL` + clarification with candidates or `delta_min` / `delta_max`, not one invented delta. A normal trade still returns one value. No write/submit tools.
+- Mixed player-or-pick phrases still apply hard-untouchable player rules. Open-ended `delta_min` / `delta_max` uses per-asset extrema, not a Cartesian product of scenarios.
+
 ## [0.2.0] — 2026-09-21
 
 Developer prerelease. First public tag of current `main`. Not published to PyPI.

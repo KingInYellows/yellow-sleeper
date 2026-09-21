@@ -9,10 +9,10 @@ This README describes the **v0.2.0 developer prerelease** (current `main`). Sett
 | Surface | Status |
 | --- | --- |
 | `main` | Current installable tree: 11 `dynasty_*` tools, explicit league/user, cache isolation, settings-matched FantasyCalc queries, provider-backed generic PICK rows with labeled static fallback, log redaction, CI |
-| Unmerged PRs `#2` `#3` `#13` `#15` `#16` `#18` | Not on `main`. `#16` ideas (TEP query + cache-by-query-shape + CI skeleton) were **re-implemented here with attribution**, not merged. Closed `#15` CSV overlay idea is this slice, re-implemented with attribution, not merged |
-| Future | FantasyCalc early/mid/late slot picking, transactions, conditionals, HTTP/OAuth/Docker, multi-user |
+| Unmerged PRs `#2` `#3` `#13` `#15` `#16` `#18` | Not on `main`. `#16` ideas (TEP query + cache-by-query-shape + CI skeleton) were **re-implemented here with attribution**, not merged. Closed `#15` CSV overlay and conditional-range ideas are this tree, re-implemented with attribution, not merged |
+| Future | FantasyCalc early/mid/late slot picking, transactions, HTTP/OAuth/Docker, multi-user |
 
-**Non-goals:** HTTP hosting, OAuth, Docker, transaction tools, workbook import, conditional-trade engine, multi-user, live API tests, Graphite submit.
+**Non-goals:** HTTP hosting, OAuth, Docker, transaction tools, workbook import, trade submission, multi-user, live API tests, Graphite submit.
 
 ## Data rights (read before install)
 
@@ -133,7 +133,7 @@ Derived from `src/yellow_sleeper/tools/` on this branch:
 4. `dynasty_list_traded_picks` — league traded-pick market (owner roster via username helper)
 5. `dynasty_list_my_picks` — native + traded-in (optional traded-away)
 6. `dynasty_get_player_value` — FantasyCalc lookup; optional CSV overlay (`xlsx`) wins when configured
-7. `dynasty_analyze_trade` — resolution, guardrails, value math, roster context
+7. `dynasty_analyze_trade` — resolution, guardrails, value math, roster context; conditional/OR/swap language returns a range or candidates plus clarification
 8. `dynasty_league_power_map` — per-team rollups
 9. `dynasty_whats_on_the_clock` — draft clock / recent picks
 10. `dynasty_best_player_available` — rookie BPA board
@@ -178,9 +178,10 @@ Do not commit `.env`, `.yellow-sleeper.yaml`, `.yellow-sleeper-values.csv`, cach
 
 ## Limitations
 
-- When a generic `{season} {ordinal}` FantasyCalc PICK row is missing but Early/Mid/Late band rows exist, the single-number field stays empty and provenance reports the low/high range plus band labels (`PARTIAL`). Static R1=3000 is fallback only when neither generic nor band rows exist. No projected_slot or conditional-trade engine.
+- When a generic `{season} {ordinal}` FantasyCalc PICK row is missing but Early/Mid/Late band rows exist, the single-number field stays empty and provenance reports the low/high range plus band labels (`PARTIAL`). Static R1=3000 is fallback only when neither generic nor band rows exist. No projected_slot.
 - Optional local CSV overlay (`values_overlay_path`) is keyed by Sleeper player id. Contract source name stays `xlsx`. Overlay wins over FantasyCalc when the file loads. A missing configured file is an explicit status, not a silent FantasyCalc fallback labeled as overlay. Unset path keeps FantasyCalc-only.
-- Conditionals, transactions, HTTP MCP, OAuth, Docker: out of scope.
+- Conditional, exclusive-OR, and pick-swap trade language does not get one invented delta. `dynasty_analyze_trade` returns `PARTIAL` + `NEEDS_CLARIFICATION` with candidates and/or `delta_min` / `delta_max`. A normal trade still returns one value. No write tools or trade submission.
+- Transactions, HTTP MCP, OAuth, Docker: out of scope.
 - MIT covers code and synthetic fixtures only; Sleeper/FantasyCalc commercial and redistribution rights stay a limitation (`NOTICE`).
 - GitHub org `KingInYellows` does not currently enable private vulnerability reporting.
 
