@@ -27,14 +27,14 @@ _TE_PLUS_PLUS_RE = re.compile(r"te\s*\+\+")
 
 PICK_TABLE_EXPLANATION = (
     "The static round table (R1=3000, R2=1200, R3=600, R4=300, R5=100) is fallback "
-    "only when no matching FantasyCalc PICK row exists; it is not freshly fetched "
-    "provider data."
+    "only when neither a generic PICK row nor Early/Mid/Late bands exist; it is not "
+    "freshly fetched provider data."
 )
 
 PICK_PROVIDER_EXPLANATION = (
-    "Pick values use FantasyCalc PICK rows from the active query (generic "
-    "'{season} {ordinal}' names such as '2027 1st'; never Sleeper roster_id as a "
-    "slot). Re-implements the reviewed generic-row idea from PR #15 with attribution."
+    "Pick values use generic FantasyCalc '{season} {ordinal}' PICK rows "
+    "(e.g. '2027 1st'; never roster_id as a slot). Band-only Early/Mid/Late rows "
+    "surface a low/high range; the single-number field stays empty."
 )
 
 UNSUPPORTED_FORMAT_NOTE = (
@@ -72,12 +72,11 @@ def build_query_params(
 ) -> dict[str, str]:
     """Build FantasyCalc /values/current query params.
 
-    ``tep_tier='off'`` omits the param (empty ``tep=`` errors on the API; docs
-    default ``tep=none`` is treated as omit, not sent). League 0.5 TEP maps to
-    discrete ``te+``; ``tep=0.5`` is not a documented value. Documented enums:
-    numTeams 8/10/12/14, numQbs 1/2, ppr 0/0.5/1, tep omitted/te+/te++
-    (FantasyCalc API docs, 2026-09-21). Re-implements the PR #16 query-shape
-    idea (head 3a253dd) with attribution.
+    ``tep_tier='off'`` sends documented ``tep=none`` (empty ``tep=`` errors on
+    the API). League 0.5 TEP maps to discrete ``te+``; ``tep=0.5`` is not a
+    documented value. Documented enums: numTeams 8/10/12/14, numQbs 1/2,
+    ppr 0/0.5/1, tep none/te+/te++ (FantasyCalc API docs, 2026-09-21).
+    Re-implements the PR #16 query-shape idea (head 3a253dd) with attribution.
     """
     if tep_tier not in _VALID_TEP_TIERS:
         raise ValueError(f"invalid tep_tier {tep_tier!r}; expected off, te+, or te++")
@@ -92,9 +91,8 @@ def build_query_params(
         "numQbs": num_qbs,
         "numTeams": num_teams,
         "ppr": ppr,
+        "tep": "none" if tep_tier == "off" else tep_tier,
     }
-    if tep_tier != "off":
-        params["tep"] = tep_tier
     return params
 
 
@@ -326,7 +324,7 @@ def _parse_format_tep(lowered: str, reasons: list[str]) -> FormatTep | Literal["
         return "te+"
     reasons.append(
         "league_format TEP is not a documented FantasyCalc tep value "
-        "(omit, te+ for 0.5 TEP, or te++)"
+        "(none, te+ for 0.5 TEP, or te++)"
     )
     return "invalid"
 
@@ -362,7 +360,7 @@ def query_source_explanation(query: FantasyCalcQuery) -> str:
     encoded = query.encoded_query()
     tep = query.tep_tier
     if tep == "off":
-        tep_note = "tep omitted (non-TEP board; documented default none, key not sent)."
+        tep_note = "tep=none (non-TEP board; documented default none)."
     elif tep == "te+":
         tep_note = (
             "tep=te+ (discrete TE+ tier approximating 0.5 TEP; not a continuous 0.5 float)."
@@ -380,7 +378,7 @@ def tep_source_explanation(tep_tier: TepTier, *, league_format: str | None = Non
     if league_format is None:
         if tep_tier == "off":
             return (
-                "FantasyCalc values requested without TEP (non-TEP board; not a 0.5 TEP model)."
+                "FantasyCalc values requested with tep=none (non-TEP board; not a 0.5 TEP model)."
             )
         if tep_tier == "te+":
             return (

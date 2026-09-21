@@ -32,7 +32,7 @@ def test_build_query_params_te_plus_and_off() -> None:
     }
     assert QUERY_PARAMS == te_plus
     off = build_query_params("off")
-    assert "tep" not in off
+    assert off["tep"] == "none"
     assert off["numQbs"] == "2"
     te_heavy = build_query_params("te++")
     assert te_heavy["tep"] == "te++"
@@ -42,6 +42,7 @@ def test_build_query_params_te_plus_and_off() -> None:
         "numQbs": "1",
         "numTeams": "12",
         "ppr": "0.5",
+        "tep": "none",
     }
     assert fantasycalc_cache_variant(te_plus) != fantasycalc_cache_variant(off)
     assert fantasycalc_cache_variant(te_plus) != fantasycalc_cache_variant(half)
@@ -109,13 +110,19 @@ def test_default_query_still_sends_te_plus() -> None:
     assert query.params["tep"] == "te+"
 
 
-def test_derived_query_does_not_inject_default_tep() -> None:
+def test_supported_non_tep_query_sends_tep_none() -> None:
     query = resolve_fantasycalc_query("12-team 1QB PPR", tep_tier="te+")
     assert query.supported is True
     assert query.params["numTeams"] == "12"
     assert query.params["numQbs"] == "1"
     assert query.params["ppr"] == "1"
-    assert "tep" not in query.params
+    assert query.params["tep"] == "none"
+    off = resolve_fantasycalc_query("14-team SF PPR", tep_tier="off")
+    assert off.supported is True
+    assert off.params["tep"] == "none"
+    text = tep_source_explanation("te+", league_format="12-team 1QB PPR")
+    assert "tep=none" in text
+    assert "omitted" not in text.lower()
 
 
 def test_supported_profile_uses_resolved_query() -> None:
@@ -171,13 +178,13 @@ async def test_fantasycalc_malformed_response_falls_back_to_stale_cache(
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_tep_off_omits_query_param() -> None:
+async def test_tep_off_sends_none() -> None:
     route = respx.get("https://api.fantasycalc.com/values/current").respond(json=[])
     async with build_shared_client() as http:
         client = FantasyCalcClient(http, tep_tier="off", league_format="14-team SF PPR")
         await client.get_current_values()
     params = dict(route.calls[0].request.url.params)
-    assert "tep" not in params
+    assert params["tep"] == "none"
     assert params["isDynasty"] == "true"
     assert params["numTeams"] == "14"
     assert params["numQbs"] == "2"
@@ -195,7 +202,7 @@ async def test_twelve_team_1qb_ppr_sends_derived_params() -> None:
     assert params["numTeams"] == "12"
     assert params["numQbs"] == "1"
     assert params["ppr"] == "1"
-    assert "tep" not in params
+    assert params["tep"] == "none"
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -22,8 +23,33 @@ PICK_VALUE_BY_ROUND = {
 }
 
 _ROUND_ORDINAL = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th", 5: "5th"}
+_BAND_LABELS = ("Early", "Mid", "Late")
 
 CONTRACT_DISAGREEMENT_PCT = 25.0
+
+
+@dataclass(frozen=True)
+class PickBandRange:
+    """Low/high FantasyCalc Early/Mid/Late values for one generic pick name."""
+
+    low: float
+    high: float
+    bands: tuple[tuple[str, float], ...]
+
+    def explanation(self, pick: Pick) -> str:
+        ordinal = _ROUND_ORDINAL.get(pick.round, f"R{pick.round}")
+        labeled = ", ".join(f"{label}={value:g}" for label, value in self.bands)
+        return (
+            f"{pick.season} {ordinal} FantasyCalc band range "
+            f"low={self.low:g} high={self.high:g} ({labeled}); "
+            "single-number omitted (no generic row, no slot picked)."
+        )
+
+
+@dataclass(frozen=True)
+class ResolvedPickValue:
+    source: ValueSourceBreakdown
+    band_range: PickBandRange | None = None
 
 
 def parse_value_records(records: Iterable[FCRecord | Mapping[str, Any]]) -> list[FCRecord]:
@@ -89,13 +115,74 @@ def match_fantasycalc_pick(
     """Resolve a Yellow pick to a FantasyCalc PICK row by generic name.
 
     Uses only ``{season} {ordinal}`` (e.g. ``2027 1st``). Banded Early/Mid/Late
-    rows and Sleeper ``roster_id`` slots are not used. Re-implements the reviewed
-    generic-row idea from PR #15 with attribution.
+    rows are not used as a single slot. Sleeper ``roster_id`` is not a draft
+    slot. Re-implements the reviewed generic-row idea from PR #15 with attribution.
     """
     ordinal = _ROUND_ORDINAL.get(pick.round)
     if ordinal is None:
         return None
     return pick_index.get(f"{pick.season} {ordinal}".lower())
+
+
+def match_fantasycalc_pick_bands(
+    pick: Pick,
+    pick_index: Mapping[str, FCRecord],
+) -> PickBandRange | None:
+    """Collect Early/Mid/Late rows for a pick when no generic row is used.
+
+    Does not select a band. Returns low/high plus the labels that exist.
+    """
+    ordinal = _ROUND_ORDINAL.get(pick.round)
+    if ordinal is None:
+        return None
+    found: list[tuple[str, float]] = []
+    for label in _BAND_LABELS:
+        record = pick_index.get(f"{pick.season} {ordinal} ({label})".lower())
+        if record is not None:
+            found.append((label, record.value))
+    if not found:
+        return None
+    values = [value for _, value in found]
+    return PickBandRange(low=min(values), high=max(values), bands=tuple(found))
+
+
+def resolve_pick_value(
+    round_number: int,
+    *,
+    pick: Pick | None = None,
+    pick_index: Mapping[str, FCRecord] | None = None,
+    timestamp: datetime | None = None,
+) -> ResolvedPickValue:
+    if pick is not None and pick_index:
+        matched = match_fantasycalc_pick(pick, pick_index)
+        if matched is not None:
+            return ResolvedPickValue(
+                source=value_source(
+                    "fantasycalc",
+                    matched.value,
+                    timestamp=timestamp,
+                    enabled=True,
+                )
+            )
+        bands = match_fantasycalc_pick_bands(pick, pick_index)
+        if bands is not None:
+            return ResolvedPickValue(
+                source=value_source(
+                    "fantasycalc",
+                    None,
+                    timestamp=timestamp,
+                    enabled=True,
+                ),
+                band_range=bands,
+            )
+    return ResolvedPickValue(
+        source=value_source(
+            "config_pick_table",
+            PICK_VALUE_BY_ROUND.get(round_number),
+            timestamp=timestamp,
+            enabled=True,
+        )
+    )
 
 
 def pick_value_source(
@@ -105,21 +192,9 @@ def pick_value_source(
     pick_index: Mapping[str, FCRecord] | None = None,
     timestamp: datetime | None = None,
 ) -> ValueSourceBreakdown:
-    if pick is not None and pick_index:
-        matched = match_fantasycalc_pick(pick, pick_index)
-        if matched is not None:
-            return value_source(
-                "fantasycalc",
-                matched.value,
-                timestamp=timestamp,
-                enabled=True,
-            )
-    return value_source(
-        "config_pick_table",
-        PICK_VALUE_BY_ROUND.get(round_number),
-        timestamp=timestamp,
-        enabled=True,
-    )
+    return resolve_pick_value(
+        round_number, pick=pick, pick_index=pick_index, timestamp=timestamp
+    ).source
 
 
 def source_disagreement(

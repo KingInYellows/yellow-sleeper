@@ -247,3 +247,17 @@ Blockers:
 - Commercial/redistribution rights for Sleeper and FantasyCalc payloads remain an explicit limitation (`NOTICE`), not a grant.
 - Banded FantasyCalc pick rows and projected slots remain unused.
 
+## 2026-09-21 — Valuation residuals (`tep=none` + pick-band range)
+
+Current milestone: valuation residuals on `agent/valuation-residuals` (draft PR).
+
+What was just completed:
+- Supported non-TEP FantasyCalc queries send documented `tep=none` instead of omitting the key. Default 14-team SF full-PPR 0.5 TEP still sends `tep=te+`; `te++` unchanged.
+- When a generic `{season} {ordinal}` PICK row is missing but Early/Mid/Late band rows exist, provenance reports low/high plus band labels and `data_status=PARTIAL`; the single-number field is not a fabricated slot. Static R1=3000 remains labeled fallback only when neither generic nor band rows exist.
+
+What's next:
+- Coordinator/owner review of draft PR. Stay draft.
+
+Blockers:
+- Commercial/redistribution rights for Sleeper and FantasyCalc payloads remain an explicit limitation (`NOTICE`), not a grant.
+

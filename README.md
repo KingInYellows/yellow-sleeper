@@ -33,15 +33,15 @@ FantasyCalc `/values/current` params are derived from configured `league_format`
 | `numQbs` | `"1"` (1QB) or `"2"` (Superflex/2QB) | `2` |
 | `numTeams` | `8`, `10`, `12`, `14` | `14` |
 | `ppr` | `0`, `0.5`, `1` | `1` |
-| `tep` | omitted (none), `te+`, `te++` | `te+` |
+| `tep` | `none`, `te+`, `te++` | `te+` |
 
 Default query: `isDynasty=true&numQbs=2&numTeams=14&ppr=1&tep=te+`
 
-- `tep=te+` is the documented discrete TE+ tier for 0.5 TEP (not a local `0.5` multiplier). `tep=none` is documented as the default; this server **omits** the key instead of sending `tep=none` or empty `tep=`.
-- `tep_tier=off` omits `tep` when the format does not request TEP. `te++` is the documented heavy-TEP discrete tier.
-- Supported examples include `12-team 1QB PPR`, `10-team Superflex 0.5 PPR`, `8-team SF non-PPR`, and `14-team SF PPR` (no TEP → tep omitted).
+- `tep=te+` is the documented discrete TE+ tier for 0.5 TEP (not a local `0.5` multiplier). Supported non-TEP queries send literal `tep=none` (documented enum; empty `tep=` errors).
+- `tep_tier=off` sends `tep=none` when the format does not request TEP. `te++` is the documented heavy-TEP discrete tier.
+- Supported examples include `12-team 1QB PPR`, `10-team Superflex 0.5 PPR`, `8-team SF non-PPR`, and `14-team SF PPR` (no TEP → `tep=none`).
 - Unsupported combinations (`16`-team, `214-team`, SF+1QB together, missing PPR, `1.5 TEP`, empty format) **do not** reuse another board. Tools return missing/partial values with reasons. Cache files stay isolated by schema version `v1` plus the normalized query that was actually sent.
-- **Pick values:** when the active FantasyCalc payload includes `position=PICK` rows, picks use the generic `{season} {ordinal}` row (e.g. `2027 1st`) and provenance says `fantasycalc`. Early/mid/late bands and Sleeper `roster_id` slots are not used. The static round table (R1=3000, R2=1200, R3=600, R4=300, R5=100) is **fallback only**, labeled `config_pick_table`, never presented as freshly fetched provider data.
+- **Pick values:** when a generic `{season} {ordinal}` FantasyCalc `PICK` row exists (e.g. `2027 1st`), that single value is used and provenance says `fantasycalc`. When it does not, and Early/Mid/Late band rows exist, the single-number field stays empty and provenance reports the low/high range plus band labels (`PARTIAL`). Sleeper `roster_id` is never a draft slot. The static round table (R1=3000, R2=1200, R3=600, R4=300, R5=100) is **fallback only** when neither generic nor band rows exist, labeled `config_pick_table`, never presented as freshly fetched provider data.
 - Missing/partial player values stay on the roster or pick list with `data_status` partial/unavailable. The server does not invent numbers.
 
 ## Install
@@ -173,7 +173,7 @@ Do not commit `.env`, `.yellow-sleeper.yaml`, caches, or logs. The example YAML 
 
 ## Limitations
 
-- Banded FantasyCalc pick rows (Early/Mid/Late) and projected draft slots are unused; generic season+round rows or the labeled static fallback.
+- When a generic `{season} {ordinal}` FantasyCalc PICK row is missing but Early/Mid/Late band rows exist, the single-number field stays empty and provenance reports the low/high range plus band labels (`PARTIAL`). Static R1=3000 is fallback only when neither generic nor band rows exist. No projected_slot, CSV/xlsx overlay, or conditional-trade engine.
 - XLSX overlay, conditionals, transactions, HTTP MCP, OAuth, Docker: out of scope.
 - MIT covers code and synthetic fixtures only; Sleeper/FantasyCalc commercial and redistribution rights stay a limitation (`NOTICE`).
 - GitHub org `KingInYellows` does not currently enable private vulnerability reporting.

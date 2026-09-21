@@ -248,6 +248,7 @@ The historical MVP text above is preserved. The public preview candidate additio
 * Neutral synthetic examples in public docs/fixtures (authorship notices kept).
 * Honest FantasyCalc `tep=te+` provenance for the supported 0.5 TEP profile, plus the existing static pick table.
 * League-true FantasyCalc params from configured format when they map to documented `numTeams` / `numQbs` / `ppr` / `tep`; provider `PICK` rows when present; static pick table as labeled fallback only (2026-09-21).
+* Supported non-TEP queries send `tep=none`. Generic PICK rows remain a single value; Early/Mid/Late-only rows are an explicit range plus `PARTIAL`, not a fabricated slot (2026-09-21 residuals).
 * Cache isolation by league / draft / valuation query so one cache directory cannot satisfy another identity.
 * Local stdio MCP only: no HTTP hosting, OAuth, Docker, transaction tools, workbook import, conditional-trade engine, or multi-user.
 
