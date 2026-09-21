@@ -134,3 +134,24 @@ def test_smoke_overlay_synthetic_row_overrides_fantasycalc() -> None:
     assert result.value == 5000
     assert result.source_notes[0].source == "xlsx"
     assert result.source_disagreement is not None
+
+
+def test_smoke_conditional_or_swap_is_partial_range_not_one_value(sleeper_snapshot: dict) -> None:
+    result = analyze_trade_pipeline(
+        my_send=["Jaylen Wright if he plays 10 games"],
+        my_receive=["Harold Fannin"],
+        policy=DynamicPolicy(),
+        snapshot=sleeper_snapshot,
+        players=load_fixture("sleeper/players_nfl.json"),
+        values=load_fixture("fantasycalc/values_current.json"),
+        sleeper_username="casey",
+        league_format="14-team SF PPR 0.5 TEP",
+    )
+    assert any(flag.type.value == "conditional_or_swap_trade" for flag in result.policy_flags)
+    assert result.resolution_status == ResolutionStatus.NEEDS_CLARIFICATION
+    assert result.data_status == DataStatus.PARTIAL
+    assert result.value_math is not None
+    assert result.value_math.delta is None
+    assert result.value_math.delta_min is not None
+    assert result.value_math.delta_max is not None
+    assert result.value_math.delta_min != result.value_math.delta_max

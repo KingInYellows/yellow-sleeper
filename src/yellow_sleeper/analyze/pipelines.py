@@ -4,6 +4,7 @@ import re
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
+from itertools import product
 from statistics import mean, median
 from typing import Any
 
@@ -20,6 +21,7 @@ from ..models import (
     BlockingRule,
     BPACandidate,
     CacheRefreshResult,
+    Candidate,
     DataStatus,
     FindRosterOutput,
     FlagSeverity,
@@ -57,6 +59,15 @@ from .roster import (
     build_roster_lineup,
     current_season,
     find_roster_id_for_username,
+)
+from .trade_phrases import (
+    is_conditional,
+    is_open_ended_asset,
+    is_open_ended_trade,
+    is_or_choice,
+    is_swap,
+    normalize_trade_asset,
+    or_choice_parts,
 )
 from .value import (
     CONTRACT_DISAGREEMENT_PCT,
@@ -497,6 +508,10 @@ def analyze_trade_pipeline(
     blocking_rules = _blocking_rules(my_send, send_resolutions, players, policy)
     resolution_status = _resolution_status(asset_resolutions)
     flags = _trade_policy_flags(asset_resolutions, policy, players, current_season(snapshot))
+    open_ended = is_open_ended_trade(my_send + my_receive)
+    if open_ended:
+        flags.append(_conditional_or_swap_flag())
+        resolution_status = ResolutionStatus.NEEDS_CLARIFICATION
 
     if blocking_rules:
         return AnalyzeTradeOutput(
@@ -512,7 +527,7 @@ def analyze_trade_pipeline(
             roster_context=None,
         )
 
-    if resolution_status == ResolutionStatus.NEEDS_CLARIFICATION:
+    if resolution_status == ResolutionStatus.NEEDS_CLARIFICATION and not open_ended:
         flags.extend(_ambiguous_flags(asset_resolutions))
         return AnalyzeTradeOutput(
             policy_status=PolicyStatus.OK,
@@ -526,6 +541,17 @@ def analyze_trade_pipeline(
             roster_context=None,
         )
 
+    if open_ended:
+        flags.extend(
+            _ambiguous_flags(
+                [
+                    resolution
+                    for resolution in asset_resolutions
+                    if not is_open_ended_asset(resolution.input)
+                ]
+            )
+        )
+
     value_math, missing_assets, band_notes = _trade_value_math(
         send_resolutions,
         receive_resolutions,
@@ -534,21 +560,26 @@ def analyze_trade_pipeline(
         pick_index,
         timestamp=values_timestamp,
         overlay=overlay_state,
+        open_ended=open_ended,
     )
     flags.extend(_missing_value_flags(missing_assets, band_notes))
     flags.extend(_value_cache_flags(values_cache_status, values_cache_error))
     data_status = _trade_data_status(
         value_math, missing_assets, band_range_assets=list(band_notes)
     )
+    if open_ended:
+        data_status = DataStatus.PARTIAL
     data_status = _with_stale_data_status(data_status, values_cache_status)
-    roster_context = _roster_context(
-        snapshot,
-        players,
-        my_roster_id,
-        send_resolutions,
-        receive_resolutions,
-        inventory,
-    )
+    roster_context = None
+    if not open_ended:
+        roster_context = _roster_context(
+            snapshot,
+            players,
+            my_roster_id,
+            send_resolutions,
+            receive_resolutions,
+            inventory,
+        )
     overlay_notes, overlay_flags = _overlay_notes_and_flags(
         overlay_state, field="value_math", timestamp=values_timestamp
     )
@@ -567,12 +598,26 @@ def analyze_trade_pipeline(
             ),
             timestamp=values_timestamp,
         ),
-        _source_note(
-            "roster_context.age_stats",
-            "computed",
-            explanation="Pick ages are treated as 0 for pick-conversion context.",
-        ),
     ]
+    if roster_context is not None:
+        source_notes.append(
+            _source_note(
+                "roster_context.age_stats",
+                "computed",
+                explanation="Pick ages are treated as 0 for pick-conversion context.",
+            )
+        )
+    if open_ended:
+        source_notes.append(
+            _source_note(
+                "value_math.delta",
+                "computed",
+                explanation=(
+                    "Conditional, OR, or pick-swap language does not get one invented "
+                    "delta. See candidates and/or value_math.delta_min/delta_max."
+                ),
+            )
+        )
     source_notes.extend(_pick_band_range_notes(band_notes, values_timestamp))
     source_notes.extend(overlay_notes)
     return AnalyzeTradeOutput(
@@ -1078,6 +1123,23 @@ def _resolve_asset(
     players: Mapping[str, Any],
     season: int,
 ) -> AssetResolution:
+    lookup = normalize_trade_asset(asset)
+    parts = or_choice_parts(lookup)
+    if len(parts) >= 2:
+        return _resolve_or_asset(asset, parts, side, inventory, players, season)
+    resolution = _resolve_plain_asset(lookup, side, inventory, players, season)
+    if is_swap(asset) and not resolution.candidates:
+        resolution = _swap_candidates(resolution, side, inventory)
+    return resolution.model_copy(update={"input": asset})
+
+
+def _resolve_plain_asset(
+    asset: str,
+    side: str,
+    inventory: PickInventory,
+    players: Mapping[str, Any],
+    season: int,
+) -> AssetResolution:
     parsed = parse_pick_description(asset, current_season=season, draft_active=False)
     pickish = parsed.round is not None or any(
         token in asset.lower() for token in ["pick", "1st", "2nd"]
@@ -1091,6 +1153,107 @@ def _resolve_asset(
             side=side,
         )
     return resolve_player(asset, players)
+
+
+def _resolve_or_asset(
+    original: str,
+    parts: list[str],
+    side: str,
+    inventory: PickInventory,
+    players: Mapping[str, Any],
+    season: int,
+) -> AssetResolution:
+    candidates: list[Candidate] = []
+    asset_type: str = "player"
+    seen: set[str] = set()
+    for part in parts[:5]:
+        resolution = _resolve_plain_asset(part, side, inventory, players, season)
+        if resolution.asset_type == "pick":
+            asset_type = "pick"
+        for candidate in _candidates_from_resolution(resolution, players):
+            key = candidate.sleeper_id or candidate.pick_token or candidate.name
+            if key in seen:
+                continue
+            seen.add(key)
+            candidates.append(candidate)
+    return AssetResolution(
+        input=original,
+        asset_type=asset_type,  # type: ignore[arg-type]
+        resolved_id=None,
+        match_confidence=50,
+        candidates=candidates[:5],
+        manual_review=True,
+    )
+
+
+def _candidates_from_resolution(
+    resolution: AssetResolution,
+    players: Mapping[str, Any] | None = None,
+) -> list[Candidate]:
+    if resolution.candidates:
+        return list(resolution.candidates)
+    if resolution.resolved_id is None:
+        return []
+    if resolution.asset_type == "player":
+        raw = _player_record(resolution.resolved_id, players or {}) or {}
+        name = _resolved_player_name(resolution.resolved_id, players or {}) or resolution.input
+        return [
+            Candidate(
+                sleeper_id=resolution.resolved_id,
+                name=name,
+                position=raw.get("position"),
+                team=raw.get("team"),
+                match_confidence=resolution.match_confidence,
+            )
+        ]
+    return [
+        Candidate(
+            pick_token=resolution.resolved_id,
+            name=resolution.input,
+            match_confidence=resolution.match_confidence,
+        )
+    ]
+
+
+def _swap_candidates(
+    resolution: AssetResolution,
+    side: str,
+    inventory: PickInventory,
+) -> AssetResolution:
+    pool = inventory.owned_picks if side == "send" else inventory.league_picks
+    token = resolution.resolved_id
+    if token:
+        match = _PICK_TOKEN_RE.match(token)
+        if match:
+            season = int(match.group(1))
+            round_number = int(match.group(2))
+            siblings = [
+                pick for pick in pool if pick.season == season and pick.round == round_number
+            ]
+            if len(siblings) > 1:
+                return AssetResolution(
+                    input=resolution.input,
+                    asset_type="pick",
+                    resolved_id=None,
+                    match_confidence=50,
+                    candidates=[
+                        Candidate(
+                            pick_token=pick.pick_token,
+                            name=pick.display_name,
+                            match_confidence=50,
+                        )
+                        for pick in siblings[:5]
+                    ],
+                    manual_review=True,
+                )
+    if resolution.resolved_id and not resolution.candidates:
+        return resolution.model_copy(
+            update={
+                "candidates": _candidates_from_resolution(resolution)[:5],
+                "manual_review": True,
+            }
+        )
+    return resolution
 
 
 def _resolution_status(resolutions: list[AssetResolution]) -> ResolutionStatus:
@@ -1113,19 +1276,26 @@ def _blocking_rules(
     for raw, resolution in zip(send_assets, send_resolutions, strict=True):
         if resolution.asset_type != "player":
             continue
-        resolved_name = _resolved_player_name(resolution.resolved_id, players) or raw
-        for untouchable in policy.hard_untouchables:
-            score = int(round(fuzz.WRatio(resolved_name, untouchable)))
-            if score >= 88:
-                rules.append(
-                    BlockingRule(
-                        rule="hard_untouchable",
-                        asset=resolved_name,
-                        matched_against=untouchable,
-                        match_confidence=score,
-                        rule_source=".yellow-sleeper.yaml",
+        names = []
+        resolved_name = _resolved_player_name(resolution.resolved_id, players)
+        if resolved_name:
+            names.append(resolved_name)
+        else:
+            names.append(raw)
+        names.extend(candidate.name for candidate in resolution.candidates if candidate.name)
+        for display in names:
+            for untouchable in policy.hard_untouchables:
+                score = int(round(fuzz.WRatio(display, untouchable)))
+                if score >= 88:
+                    rules.append(
+                        BlockingRule(
+                            rule="hard_untouchable",
+                            asset=display,
+                            matched_against=untouchable,
+                            match_confidence=score,
+                            rule_source=".yellow-sleeper.yaml",
+                        )
                     )
-                )
     return rules
 
 
@@ -1213,6 +1383,7 @@ def _trade_value_math(
     *,
     timestamp: datetime | None = None,
     overlay: OverlayResult | None = None,
+    open_ended: bool = False,
 ) -> tuple[ValueMath, list[str], dict[str, str]]:
     overlay_state = overlay or DISABLED_OVERLAY
     per_asset = []
@@ -1221,7 +1392,12 @@ def _trade_value_math(
     missing_assets = []
     disagreements = []
     band_notes: dict[str, str] = {}
-    for side, resolutions in [("send", send), ("receive", receive)]:
+    send_options: list[list[float]] = []
+    receive_options: list[list[float]] = []
+    for side, resolutions, option_lists in (
+        ("send", send, send_options),
+        ("receive", receive, receive_options),
+    ):
         for resolution in resolutions:
             asset_source, band_note, merged_sources, disagreement = _asset_value_source(
                 resolution,
@@ -1232,26 +1408,65 @@ def _trade_value_math(
                 overlay=overlay_state,
             )
             value = asset_source.value
-            per_asset.append(
-                {
-                    "asset": resolution.resolved_id,
-                    "side": side,
-                    "value": value,
-                    "sources": merged_sources,
-                }
+            entry: dict[str, Any] = {
+                "asset": resolution.resolved_id,
+                "side": side,
+                "value": value,
+                "sources": merged_sources,
+            }
+            alternatives = _alternative_asset_values(
+                resolution,
+                inventory,
+                value_index,
+                pick_index,
+                timestamp=timestamp,
+                overlay=overlay_state,
             )
+            if alternatives:
+                entry["alternatives"] = alternatives
+            if is_conditional(resolution.input):
+                entry["conditional"] = True
+            per_asset.append(entry)
             if band_note:
                 band_notes[resolution.input] = band_note
-            if value is None:
+            option_lists.append(
+                _scenario_option_values(
+                    resolution,
+                    value,
+                    alternatives,
+                )
+            )
+            if value is None and not alternatives:
                 missing_assets.append(resolution.input)
                 continue
-            if side == "send":
-                send_total += value
-            else:
-                receive_total += value
+            if not open_ended and value is not None:
+                if side == "send":
+                    send_total += value
+                else:
+                    receive_total += value
             if disagreement is not None:
                 disagreements.append(disagreement)
     delta = receive_total - send_total
+    delta_min: float | None = None
+    delta_max: float | None = None
+    if open_ended:
+        bounds = _scenario_delta_bounds(send_options, receive_options)
+        if bounds is not None and bounds[0] != bounds[1]:
+            delta_min, delta_max = bounds
+        return (
+            ValueMath(
+                send_total=None,
+                receive_total=None,
+                delta=None,
+                delta_pct=None,
+                delta_min=round(delta_min, 2) if delta_min is not None else None,
+                delta_max=round(delta_max, 2) if delta_max is not None else None,
+                per_asset=per_asset,
+                source_disagreement=disagreements[0] if disagreements else None,
+            ),
+            missing_assets,
+            band_notes,
+        )
     return (
         ValueMath(
             send_total=round(send_total, 2),
@@ -1266,6 +1481,107 @@ def _trade_value_math(
     )
 
 
+def _conditional_or_swap_flag() -> PolicyFlag:
+    return PolicyFlag(
+        type=FlagType.CONDITIONAL_OR_SWAP_TRADE,
+        asset=None,
+        rule_source="computed",
+        severity=FlagSeverity.WARNING,
+        reason=(
+            "Trade input includes conditional, OR, or pick-swap language. "
+            "The server did not invent one delta; see candidates and/or "
+            "value_math.delta_min/delta_max."
+        ),
+    )
+
+
+def _alternative_asset_values(
+    resolution: AssetResolution,
+    inventory: PickInventory,
+    value_index: dict[str, FCRecord],
+    pick_index: Mapping[str, FCRecord],
+    *,
+    timestamp: datetime | None = None,
+    overlay: OverlayResult | None = None,
+) -> list[dict[str, Any]]:
+    alternatives: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    if resolution.resolved_id:
+        seen.add(resolution.resolved_id)
+    for candidate in resolution.candidates:
+        resolved_id = candidate.sleeper_id or candidate.pick_token
+        if not resolved_id or resolved_id in seen:
+            continue
+        seen.add(resolved_id)
+        fake = AssetResolution(
+            input=candidate.name,
+            asset_type="player" if candidate.sleeper_id else "pick",
+            resolved_id=resolved_id,
+            match_confidence=candidate.match_confidence,
+        )
+        source, _band, sources, _disagreement = _asset_value_source(
+            fake,
+            inventory,
+            value_index,
+            pick_index,
+            timestamp=timestamp,
+            overlay=overlay,
+        )
+        alternatives.append(
+            {
+                "asset": resolved_id,
+                "value": source.value,
+                "name": candidate.name,
+                "sources": sources,
+            }
+        )
+    return alternatives
+
+
+def _scenario_option_values(
+    resolution: AssetResolution,
+    value: float | None,
+    alternatives: list[dict[str, Any]],
+) -> list[float]:
+    numbers: list[float] = []
+    if value is not None:
+        numbers.append(float(value))
+    for alternative in alternatives:
+        alt_value = alternative.get("value")
+        if alt_value is not None:
+            numbers.append(float(alt_value))
+    unique: list[float] = []
+    for number in numbers:
+        if number not in unique:
+            unique.append(number)
+    if is_conditional(resolution.input):
+        if 0.0 not in unique:
+            unique.append(0.0)
+        return unique
+    if is_or_choice(resolution.input) or is_swap(resolution.input):
+        return unique
+    return unique[:1] if unique else []
+
+
+def _scenario_delta_bounds(
+    send_options: list[list[float]],
+    receive_options: list[list[float]],
+) -> tuple[float, float] | None:
+    if not send_options or not receive_options:
+        return None
+    if any(not options for options in send_options + receive_options):
+        return None
+    send_totals = [sum(combo) for combo in product(*send_options)]
+    receive_totals = [sum(combo) for combo in product(*receive_options)]
+    deltas = [
+        receive_total - send_total
+        for receive_total, send_total in product(receive_totals, send_totals)
+    ]
+    if not deltas:
+        return None
+    return min(deltas), max(deltas)
+
+
 def _asset_value_source(
     resolution: AssetResolution,
     inventory: PickInventory,
@@ -1276,6 +1592,9 @@ def _asset_value_source(
     overlay: OverlayResult | None = None,
 ) -> tuple[ValueSourceBreakdown, str | None, list[ValueSourceBreakdown], SourceDisagreement | None]:
     overlay_state = overlay or DISABLED_OVERLAY
+    if resolution.resolved_id is None:
+        empty = value_source("fantasycalc", None, timestamp=timestamp, enabled=True)
+        return empty, None, [empty], None
     if resolution.asset_type == "player" and resolution.resolved_id:
         chosen, sources, disagreement, _missing = merge_player_value(
             resolution.resolved_id,
