@@ -99,3 +99,7 @@ This supersedes the same-day “omit `tep=none` / ignore banded rows” sentence
 Alternatives considered: keep omitting `tep` as equivalent to none; pick Mid (or Early) as a single number; average the bands; keep using the static table whenever the generic row is missing.
 
 Why this one: the public enum includes `none`, so supported non-TEP queries should send it. Band rows are real provider data but not a known slot; a range plus PARTIAL is honest, a fabricated single slot is not.
+
+## 2026-09-21 — First public tag is v0.2.0
+
+The first public tag is `v0.2.0` (developer prerelease of current `main`), not a silent tag of unpublished `0.1.0`.
