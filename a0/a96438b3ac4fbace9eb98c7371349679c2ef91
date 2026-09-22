@@ -1,0 +1,18 @@
+CONTRIBUTING.md
+  h_6000354274ce50 9
+README.md
+  h_6000354274ce50 93-94
+tests/unit/test_caps.py
+  h_6000354274ce50 10-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a0a96438b3ac4fbace9eb98c7371349679c2ef91",
+  "prompts": {},
+  "humans": {
+    "h_6000354274ce50": {
+      "author": "KingInYellow18 <KingInYellow18@proton.me>"
+    }
+  }
+}
