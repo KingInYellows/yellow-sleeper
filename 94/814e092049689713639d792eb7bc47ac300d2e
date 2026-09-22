@@ -1,0 +1,14 @@
+TECHNICAL_OVERVIEW.md
+  h_6000354274ce50 1-361
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "94814e092049689713639d792eb7bc47ac300d2e",
+  "prompts": {},
+  "humans": {
+    "h_6000354274ce50": {
+      "author": "KingInYellow18 <KingInYellow18@proton.me>"
+    }
+  }
+}
