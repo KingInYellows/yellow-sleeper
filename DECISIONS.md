@@ -131,3 +131,7 @@ This re-implements the reviewed conditional-range idea from closed PR #15 (`curs
 Alternatives considered: merge #15’s overlay/banded/conditional stack; keep returning one condition-true `delta` plus min/max (as in #15); leave swap as flag-only without clarification; fuzzy-resolve “A or B” to the higher WRatio name.
 
 Why this one: one number for an unverified trigger, alternative, or swap is a lie. A range or a candidate list plus clarification matches the existing envelope without adding a trade-submission engine.
+
+## 2026-09-22 — v0.3.0 is the next developer prerelease of main
+
+`v0.3.0` is the developer prerelease of `main` after overlay [#25](https://github.com/KingInYellows/yellow-sleeper/pull/25) (`68d3ddef299c63385ab3c4b660916428f6647e7d`) and ranges [#26](https://github.com/KingInYellows/yellow-sleeper/pull/26) (`e3b4c02`). Tag `v0.2.0` stays on `617427ff`.
