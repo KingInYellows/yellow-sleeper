@@ -6,6 +6,7 @@ This is a personal dynasty MCP server. Current installable code is on `main`. Op
 
 ```bash
 uv sync --extra dev
+uv lock --check
 uv run ruff check src tests scripts
 uv run python -m pytest tests/ -v
 uv run yellow-sleeper --help

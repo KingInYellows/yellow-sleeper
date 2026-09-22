@@ -90,6 +90,8 @@ There is **no** silent first-roster or username fallback.
 | `tep_tier` | `YELLOW_SLEEPER_TEP_TIER` (`off` / `te+` / `te++`) |
 | `values_overlay_path` | `YELLOW_SLEEPER_VALUES_OVERLAY_PATH` (CSV keyed by `sleeper_id`; contract source name `xlsx`) |
 | `hard_untouchables` | `YELLOW_SLEEPER_HARD_UNTOUCHABLES` (comma-separated) |
+| `protected_players` | `YELLOW_SLEEPER_PROTECTED_PLAYERS` (comma-separated) |
+| `protected_pick_patterns` | `YELLOW_SLEEPER_PROTECTED_PICK_PATTERNS` (comma-separated) |
 | config path | `YELLOW_SLEEPER_CONFIG` (default `.yellow-sleeper.yaml`) |
 
 `dynasty_health_check` (without `force_probe`) works when identity is missing and reports the error in `errors`.
