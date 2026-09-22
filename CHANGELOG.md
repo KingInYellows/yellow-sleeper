@@ -1,9 +1,16 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.0] — 2026-09-22
+
+Developer prerelease. v0.2.0 plus the CSV value overlay and conditional/OR/swap ranges already on `main`. Not published to PyPI.
 
 - Conditional, exclusive-OR, and pick-swap trade language returns `PARTIAL` + clarification with candidates or `delta_min` / `delta_max`, not one invented delta. A normal trade still returns one value. No write/submit tools.
 - Mixed player-or-pick phrases still apply hard-untouchable player rules. Open-ended `delta_min` / `delta_max` uses per-asset extrema, not a Cartesian product of scenarios.
+- Optional local CSV keyed by Sleeper player id. Contract source name stays `xlsx`. Overlay wins when the file loads. A missing configured file is an explicit status; unset path stays FantasyCalc-only.
+
+### Not in this tag
+
+HTTP MCP, OAuth, Docker, transaction tools, multi-user, and PyPI upload are out of scope.
 
 ## [0.2.0] — 2026-09-21
 
