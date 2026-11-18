@@ -13,3 +13,8 @@
 ## Notes for reviewers
 
 <!-- Anything the author wants to call attention to -->
+
+## Linear
+
+<!-- Replace with an existing issue: "Fixes SLPR-123", or "Refs SLPR-123" for partial work. Keep "Fixes SLPR-NEW" only if no issue exists yet. -->
+Fixes SLPR-NEW
