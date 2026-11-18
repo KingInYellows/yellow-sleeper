@@ -16,5 +16,5 @@
 
 ## Linear
 
-<!-- Replace with an existing issue: "Fixes SLPR-123", or "Refs SLPR-123" for partial work. Keep "Fixes SLPR-NEW" only if no issue exists yet. -->
+<!-- Replace the placeholder below with an existing issue key, or keep it only if no issue exists yet. Use "Refs" instead of "Fixes" for partial work. -->
 Fixes SLPR-NEW
